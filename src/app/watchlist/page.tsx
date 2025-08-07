@@ -74,12 +74,79 @@ export default function WatchlistPage() {
     if (defaultWatchlist.items.length > 0 && !storeLoading) {
       // Small delay to ensure store is fully loaded
       const timer = setTimeout(() => {
+        validateAndFixWatchlistSymbols()
         refreshWatchlistData()
       }, 1000)
       
       return () => clearTimeout(timer)
     }
   }, [defaultWatchlist.items.length, storeLoading])
+
+  // Function to validate and fix invalid symbols
+  const validateAndFixWatchlistSymbols = async () => {
+    try {
+      const { updateWatchlistItem, removeFromWatchlist } = useWatchlistStore.getState()
+      
+      // Common symbol corrections
+      const symbolCorrections: { [key: string]: string } = {
+        'APPL': 'AAPL',
+        'GOOG': 'GOOGL',
+        'MSFT': 'MSFT', // Already correct
+        'TSLA': 'TSLA', // Already correct
+        'AMZN': 'AMZN', // Already correct
+        'PFE': 'PFE'    // Already correct
+      }
+      
+      for (const item of defaultWatchlist.items) {
+        // Check if symbol needs correction
+        if (symbolCorrections[item.symbol]) {
+          const correctSymbol = symbolCorrections[item.symbol]
+          
+          // Test if the corrected symbol works
+          try {
+            const response = await fetch(`/api/stocks/quote?symbol=${encodeURIComponent(correctSymbol)}`)
+            if (response.ok) {
+              const data = await response.json()
+              if (data.stock && data.stock.price > 0) {
+                // Update the symbol and data
+                updateWatchlistItem(defaultWatchlist.id, item.id, {
+                  symbol: correctSymbol,
+                  name: data.stock.name,
+                  price: data.stock.price,
+                  change: data.stock.change,
+                  changePercent: data.stock.changePercent,
+                  volume: data.stock.volume
+                })
+                console.log(`✅ Fixed symbol ${item.symbol} → ${correctSymbol}`)
+              }
+            }
+          } catch (error) {
+            console.error(`Error fixing symbol ${item.symbol}:`, error)
+          }
+        }
+        
+        // Check if current symbol returns valid data
+        try {
+          const response = await fetch(`/api/stocks/quote?symbol=${encodeURIComponent(item.symbol)}`)
+          if (response.ok) {
+            const data = await response.json()
+            if (!data.stock || data.stock.price === 0) {
+              console.warn(`⚠️ Invalid symbol detected: ${item.symbol}`)
+              // Remove invalid symbols that can't be fixed
+              if (!symbolCorrections[item.symbol]) {
+                console.log(`🗑️ Removing invalid symbol: ${item.symbol}`)
+                await removeFromWatchlist(defaultWatchlist.id, item.id)
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error validating symbol ${item.symbol}:`, error)
+        }
+      }
+    } catch (error) {
+      console.error('Error validating watchlist symbols:', error)
+    }
+  }
 
   // If no default watchlist exists, create one
   useEffect(() => {
@@ -239,12 +306,19 @@ export default function WatchlistPage() {
       
       if (response.ok) {
         const data = await response.json()
-        if (data.stock) {
+        if (data.stock && data.stock.price > 0) {
           freshStockData = data.stock
           console.log(`✅ Fetched fresh data for ${stock.symbol}:`, freshStockData)
+        } else {
+          // Invalid symbol - don't add to watchlist
+          throw new Error(`Invalid symbol: ${stock.symbol} - No valid data found`)
         }
       } else {
         console.warn(`⚠️ Could not fetch fresh data for ${stock.symbol}, using search data`)
+        // Validate that search data has a valid price
+        if (!stock.price || stock.price <= 0) {
+          throw new Error(`Invalid symbol: ${stock.symbol} - No valid price data`)
+        }
       }
       
       const watchlistItem: WatchlistItem = {
@@ -273,7 +347,9 @@ export default function WatchlistPage() {
       let errorMessage = `Failed to add ${stock.symbol} to watchlist. Please try again.`
       
       if (error instanceof Error) {
-        if (error.message.includes('duplicate') || error.message.includes('already exists')) {
+        if (error.message.includes('Invalid symbol')) {
+          errorMessage = `${stock.symbol} is not a valid stock symbol. Please check the symbol and try again.`
+        } else if (error.message.includes('duplicate') || error.message.includes('already exists')) {
           errorMessage = `${stock.symbol} is already in your watchlist.`
         } else if (error.message.includes('storage') || error.message.includes('quota')) {
           errorMessage = 'Storage limit reached. Please remove some stocks from your watchlist.'
