@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { AlertCircle, CheckCircle, Wifi, WifiOff, Info } from 'lucide-react'
-import { polygonAPI } from '@/lib/polygon-api'
+import { AlertCircle, CheckCircle, Wifi, WifiOff, Info, Database } from 'lucide-react'
 
 interface ConnectionInfo {
-  isWebSocketConnected: boolean
-  isFreeTier: boolean
-  wsAuthenticationFailed: boolean
-  connectionAttempts: number
-  subscribedSymbols: string[]
-  isPolling: boolean
+  isConnected: boolean
+  source: string
+  lastUpdate: string
+  symbolsCount: number
+  status: 'connected' | 'disconnected' | 'error' | 'loading'
 }
 
 interface PolygonConnectionStatusProps {
@@ -21,20 +19,46 @@ export function PolygonConnectionStatus({ className = '', showDetails = false }:
   const [isExpanded, setIsExpanded] = useState(false)
 
   useEffect(() => {
-    const updateConnectionInfo = () => {
+    const updateConnectionInfo = async () => {
       try {
-        const info = polygonAPI.getConnectionInfo()
-        setConnectionInfo(info)
+        // Test multi-source connection by fetching AAPL data
+        const response = await fetch('/api/stocks/quote?symbol=AAPL')
+        const data = await response.json()
+        
+        if (data.stock && data.stock.price > 0) {
+          setConnectionInfo({
+            isConnected: true,
+            source: 'yfinance',
+            lastUpdate: new Date().toLocaleTimeString(),
+            symbolsCount: 0, // Will be updated from store
+            status: 'connected'
+          })
+        } else {
+          setConnectionInfo({
+            isConnected: false,
+            source: 'none',
+            lastUpdate: 'Never',
+            symbolsCount: 0,
+            status: 'error'
+          })
+        }
       } catch (error) {
         console.error('Error getting connection info:', error)
+        setConnectionInfo({
+          isConnected: false,
+          source: 'none',
+          lastUpdate: 'Never',
+          symbolsCount: 0,
+          status: 'error'
+        })
       }
     }
 
     // Update immediately
     updateConnectionInfo()
 
-    // Update every 5 seconds
-    const interval = setInterval(updateConnectionInfo, 5000)
+    // Update every 30 seconds
+    const interval = setInterval(updateConnectionInfo, 30000)
 
     return () => clearInterval(interval)
   }, [])
@@ -44,53 +68,41 @@ export function PolygonConnectionStatus({ className = '', showDetails = false }:
   }
 
   const getStatusIcon = () => {
-    if (connectionInfo.isWebSocketConnected) {
-      return <CheckCircle className="h-4 w-4 text-green-500" />
-    } else if (connectionInfo.isPolling) {
-      return <Wifi className="h-4 w-4 text-blue-500" />
+    if (connectionInfo.isConnected) {
+      return <Database className="h-4 w-4 text-green-500" />
     } else {
       return <WifiOff className="h-4 w-4 text-red-500" />
     }
   }
 
   const getStatusText = () => {
-    if (connectionInfo.isWebSocketConnected) {
-      return '15-min delayed (WebSocket)'
-    } else if (connectionInfo.isPolling) {
-      return 'Polling (REST API)'
+    if (connectionInfo.isConnected) {
+      return `Live Data (${connectionInfo.source})`
     } else {
       return 'Disconnected'
     }
   }
 
   const getStatusColor = () => {
-    if (connectionInfo.isWebSocketConnected) {
+    if (connectionInfo.isConnected) {
       return 'text-green-600'
-    } else if (connectionInfo.isPolling) {
-      return 'text-blue-600'
     } else {
       return 'text-red-600'
     }
   }
 
   const getTierInfo = () => {
-    if (connectionInfo.isWebSocketConnected) {
+    if (connectionInfo.isConnected) {
       return {
-        tier: '$29 Starter',
-        description: '15-minute delayed WebSocket updates',
-        color: 'text-orange-600 bg-orange-50 border-orange-200'
-      }
-    } else if (connectionInfo.isFreeTier || connectionInfo.wsAuthenticationFailed) {
-      return {
-        tier: 'Free Tier',
-        description: 'Using REST API with 15-second updates',
-        color: 'text-blue-600 bg-blue-50 border-blue-200'
+        tier: 'Multi-Source',
+        description: `Real-time data via ${connectionInfo.source}`,
+        color: 'text-green-600 bg-green-50 border-green-200'
       }
     } else {
       return {
-        tier: 'Unknown',
-        description: 'Connection status unclear',
-        color: 'text-gray-600 bg-gray-50 border-gray-200'
+        tier: 'Offline',
+        description: 'No data source available',
+        color: 'text-red-600 bg-red-50 border-red-200'
       }
     }
   }
@@ -120,52 +132,32 @@ export function PolygonConnectionStatus({ className = '', showDetails = false }:
         )}
       </div>
 
-      {showDetails && isExpanded && (
+                {showDetails && isExpanded && (
         <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
           <div className="text-xs text-gray-600">
             <div className="font-medium mb-1">Connection Details:</div>
             <div>• Status: {tierInfo.description}</div>
-            <div>• Subscribed symbols: {connectionInfo.subscribedSymbols.length}</div>
-            {connectionInfo.wsAuthenticationFailed && (
-              <div className="flex items-center space-x-1 text-amber-600 mt-2">
-                <AlertCircle className="h-3 w-3" />
-                <span>WebSocket authentication failed - using REST fallback</span>
-              </div>
-            )}
-            {connectionInfo.connectionAttempts > 0 && (
-              <div>• Connection attempts: {connectionInfo.connectionAttempts}</div>
-            )}
+            <div>• Data Source: {connectionInfo.source}</div>
+            <div>• Last Update: {connectionInfo.lastUpdate}</div>
+            <div>• Symbols Count: {connectionInfo.symbolsCount}</div>
           </div>
           
-          {connectionInfo.isWebSocketConnected && (
-            <div className="text-xs p-2 bg-orange-50 border border-orange-200 rounded">
-              <div className="font-medium text-orange-800 mb-1">$29 Starter Plan Active</div>
-              <div className="text-orange-700">
-                WebSocket connected with 15-minute delayed market data. 
-                <a 
-                  href="https://polygon.io/pricing" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="ml-1 underline hover:no-underline"
-                >
-                  Upgrade for real-time data
-                </a>
+          {connectionInfo.isConnected && (
+            <div className="text-xs p-2 bg-green-50 border border-green-200 rounded">
+              <div className="font-medium text-green-800 mb-1">Multi-Source System Active</div>
+              <div className="text-green-700">
+                Real-time stock data via {connectionInfo.source}. 
+                <span className="ml-1">
+                  Automatic fallback to Yahoo Finance and other sources.
+                </span>
               </div>
             </div>
           )}
-          {connectionInfo.isFreeTier && (
-            <div className="text-xs p-2 bg-blue-50 border border-blue-200 rounded">
-              <div className="font-medium text-blue-800 mb-1">Free Tier Detected</div>
-              <div className="text-blue-700">
-                Upgrade to a paid Polygon.io subscription for WebSocket updates.
-                <a 
-                  href="https://polygon.io/pricing" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="ml-1 underline hover:no-underline"
-                >
-                  View pricing
-                </a>
+          {!connectionInfo.isConnected && (
+            <div className="text-xs p-2 bg-red-50 border border-red-200 rounded">
+              <div className="font-medium text-red-800 mb-1">Connection Failed</div>
+              <div className="text-red-700">
+                Unable to connect to any data source. Check your internet connection.
               </div>
             </div>
           )}

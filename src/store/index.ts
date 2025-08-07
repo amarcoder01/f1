@@ -322,55 +322,34 @@ export const useWatchlistStore = create<WatchlistStore>()(
       
       startRealTimeUpdates: () => {
         try {
-          const { polygonAPI } = require('@/lib/polygon-api')
+          const { multiSourceAPI } = require('@/lib/multi-source-api')
           
-          // Start WebSocket connection
-          polygonAPI.startWebSocket()
-          
-          // Subscribe to all symbols in watchlists
+          // Set up periodic updates using multi-source system
           const allSymbols = get().watchlists.flatMap(w => w.items.map(item => item.symbol))
-          if (allSymbols.length > 0) {
-            polygonAPI.subscribeToSymbols(allSymbols)
-          }
           
-          // Add event listener for real-time updates
-          const cleanup = polygonAPI.addEventListener((event: MessageEvent) => {
-            try {
-              const data = JSON.parse(event.data)
-              
-              // Handle WebSocket trade events
-              if (Array.isArray(data) && data[0]?.ev === 'T') {
-                const tickerData = data[0]
-                const symbol = tickerData.sym
-                const price = tickerData.p
-                
-                if (symbol && typeof price === 'number') {
-                  // Find the item in watchlists to get previous price
-                  const state = get()
-                  const watchlist = state.watchlists.find(w => 
-                    w.items.some(item => item.symbol === symbol)
-                  )
-                  const item = watchlist?.items.find(item => item.symbol === symbol)
-                  
-                  if (item) {
-                    const previousPrice = item.price
-                    const change = price - previousPrice
-                    const changePercent = previousPrice > 0 ? (change / previousPrice) * 100 : 0
-                    
-                    get().updatePriceFromWebSocket(symbol, price, change, changePercent)
+          if (allSymbols.length > 0) {
+            // Start periodic updates every 30 seconds
+            const updateInterval = setInterval(async () => {
+              try {
+                for (const symbol of allSymbols) {
+                  const freshData = await multiSourceAPI.getStockData(symbol)
+                  if (freshData && freshData.price > 0) {
+                    get().updatePriceFromWebSocket(symbol, freshData.price, freshData.change, freshData.changePercent)
                   }
                 }
+              } catch (error) {
+                console.error('Error in periodic update:', error)
               }
-            } catch (error) {
-              console.error('Error processing WebSocket message:', error)
+            }, 30000)
+            
+            set({ isConnectedToRealTime: true })
+            
+            // Store cleanup function for later use
+            get().stopRealTimeUpdates = () => {
+              clearInterval(updateInterval)
+              set({ isConnectedToRealTime: false })
             }
-          })
-          
-          set({ isConnectedToRealTime: true })
-          
-          // Store cleanup function for later use
-          get().stopRealTimeUpdates = () => {
-            cleanup()
+          } else {
             set({ isConnectedToRealTime: false })
           }
           

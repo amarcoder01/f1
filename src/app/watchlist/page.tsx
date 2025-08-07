@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PriceTicker } from '@/components/trading/price-ticker'
 import { PolygonConnectionStatus } from '@/components/PolygonConnectionStatus'
-import { polygonAPI, PolygonStockAPI } from '@/lib/polygon-api'
+import { multiSourceAPI } from '@/lib/multi-source-api'
 import { Stock, WatchlistItem } from '@/types'
 import { useWatchlistStore } from '@/store'
 
@@ -88,50 +88,42 @@ export default function WatchlistPage() {
     }
   }, [watchlists, createWatchlist, storeLoading])
 
-  // Start real-time updates for watchlist items
+  // Start real-time updates for watchlist items using multi-source
   useEffect(() => {
     if (defaultWatchlist.items.length > 0) {
       const symbols = defaultWatchlist.items.map(item => item.symbol)
       
-      // Subscribe to symbols for real-time updates
-      polygonAPI.subscribeToSymbols(symbols)
-      
-      // Update watchlist items when real-time updates come in
-      const updateHandler = (event: MessageEvent) => {
+      // Set up periodic updates for all symbols
+      const updateInterval = setInterval(async () => {
         try {
-          const data = JSON.parse(event.data)
+          const { updateWatchlistItem } = useWatchlistStore.getState()
           
-          // Handle WebSocket trade events
-          if (Array.isArray(data) && data[0]?.ev === 'T') {
-            const tickerData = data[0]
-            const symbol = tickerData.sym
-            const price = tickerData.p
-            
-            if (symbol && typeof price === 'number') {
-              // Update the watchlist store with real-time data
-              const { updateWatchlistItemPrice } = useWatchlistStore.getState()
-              const existingItem = defaultWatchlist.items.find(item => item.symbol === symbol)
-              if (existingItem) {
-                const previousPrice = existingItem.price
-                const change = price - previousPrice
-                const changePercent = previousPrice > 0 ? (change / previousPrice) * 100 : 0
-                
-                updateWatchlistItemPrice(defaultWatchlist.id, existingItem.id, price, change, changePercent)
+          // Update each symbol with fresh data from multi-source
+          for (const symbol of symbols) {
+            try {
+              const freshData = await multiSourceAPI.getStockData(symbol)
+              if (freshData && freshData.price > 0) {
+                const existingItem = defaultWatchlist.items.find(item => item.symbol === symbol)
+                if (existingItem) {
+                  updateWatchlistItem(defaultWatchlist.id, existingItem.id, {
+                    price: freshData.price,
+                    change: freshData.change,
+                    changePercent: freshData.changePercent,
+                    volume: freshData.volume
+                  })
+                }
               }
+            } catch (error) {
+              console.error(`Error updating ${symbol}:`, error)
             }
           }
         } catch (error) {
-          console.error('Error processing real-time update:', error)
+          console.error('Error in periodic update:', error)
         }
-      }
-
-      // Add event listener
-      const cleanup = polygonAPI.addEventListener(updateHandler)
+      }, 30000) // Update every 30 seconds
 
       return () => {
-        cleanup()
-        // Unsubscribe from symbols when component unmounts or items change
-        polygonAPI.unsubscribeFromSymbols(symbols)
+        clearInterval(updateInterval)
       }
     }
   }, [defaultWatchlist.items])
@@ -309,22 +301,18 @@ export default function WatchlistPage() {
       
       const { updateWatchlistItem } = useWatchlistStore.getState()
       
-      // Refresh data for all watchlist items
+      // Refresh data for all watchlist items using multi-source
       const refreshPromises = defaultWatchlist.items.map(async (item) => {
         try {
-          const response = await fetch(`/api/stocks/quote?symbol=${encodeURIComponent(item.symbol)}`)
-          if (response.ok) {
-            const data = await response.json()
-            if (data.stock) {
-              const freshData = data.stock
-              updateWatchlistItem(defaultWatchlist.id, item.id, {
-                price: freshData.price,
-                change: freshData.change,
-                changePercent: freshData.changePercent,
-                volume: freshData.volume
-              })
-              console.log(`✅ Refreshed data for ${item.symbol}`)
-            }
+          const freshData = await multiSourceAPI.getStockData(item.symbol)
+          if (freshData && freshData.price > 0) {
+            updateWatchlistItem(defaultWatchlist.id, item.id, {
+              price: freshData.price,
+              change: freshData.change,
+              changePercent: freshData.changePercent,
+              volume: freshData.volume
+            })
+            console.log(`✅ Refreshed data for ${item.symbol}: $${freshData.price}`)
           } else {
             console.warn(`⚠️ Could not refresh data for ${item.symbol}`)
           }
@@ -334,7 +322,7 @@ export default function WatchlistPage() {
       })
       
       await Promise.all(refreshPromises)
-      console.log('✅ Watchlist data refresh completed')
+      console.log('✅ Watchlist data refresh completed via multi-source')
     } catch (error) {
       console.error('Error refreshing watchlist data:', error)
       setError('Failed to refresh watchlist data. Please try again.')
