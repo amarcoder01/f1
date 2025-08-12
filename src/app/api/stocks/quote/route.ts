@@ -102,7 +102,10 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`API: Successfully fetched quote for ${symbol} via yfinance`)
-    return NextResponse.json({ stock: result.stock })
+    return NextResponse.json({ 
+      success: true, 
+      data: result.stock 
+    })
 
   } catch (error) {
     console.error('API: Quote fetch error:', error)

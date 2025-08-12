@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PriceTicker } from '@/components/trading/price-ticker'
 import { PolygonConnectionStatus } from '@/components/PolygonConnectionStatus'
-import { multiSourceAPI } from '@/lib/multi-source-api'
+import { searchStocks as multiSourceSearchStocks, getStockData } from '@/lib/multi-source-api'
 import { Stock, WatchlistItem } from '@/types'
 import { useWatchlistStore } from '@/store'
 
@@ -168,7 +168,7 @@ export default function WatchlistPage() {
           // Update each symbol with fresh data from multi-source
           for (const symbol of symbols) {
             try {
-              const freshData = await multiSourceAPI.getStockData(symbol)
+              const freshData = await getStockData(symbol)
               if (freshData && freshData.price > 0) {
                 const existingItem = defaultWatchlist.items.find(item => item.symbol === symbol)
                 if (existingItem) {
@@ -249,7 +249,7 @@ export default function WatchlistPage() {
         setSearchResults(results)
         
         if (results.length === 0) {
-          setError(`No US stocks found for "${searchQuery}". Try searching with a different term or check your API configuration.`)
+          setError(`No stocks found for "${searchQuery}". Try searching with a different term or check your API configuration.`)
         } else {
           console.log(`✅ Found ${results.length} stocks for "${searchQuery}"`)
         }
@@ -380,7 +380,7 @@ export default function WatchlistPage() {
       // Refresh data for all watchlist items using multi-source
       const refreshPromises = defaultWatchlist.items.map(async (item) => {
         try {
-          const freshData = await multiSourceAPI.getStockData(item.symbol)
+          const freshData = await getStockData(item.symbol)
           if (freshData && freshData.price > 0) {
             updateWatchlistItem(defaultWatchlist.id, item.id, {
               price: freshData.price,
@@ -443,9 +443,9 @@ export default function WatchlistPage() {
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">US Stock Watchlist</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Stock Watchlist</h1>
           <p className="text-muted-foreground">
-            Track your favorite US stocks and monitor their real-time performance
+            Track your favorite stocks and monitor their real-time performance
           </p>
         </div>
         <div className="flex items-center space-x-2">
@@ -478,7 +478,7 @@ export default function WatchlistPage() {
               if (!isAddingSymbol) {
                 // Focus on search input when opening add mode
                 setTimeout(() => {
-                  const searchInput = document.querySelector('input[placeholder*="Search US stocks"]') as HTMLInputElement
+                  const searchInput = document.querySelector('input[placeholder*="Search stocks"]') as HTMLInputElement
                   if (searchInput) {
                     searchInput.focus()
                   }
@@ -505,7 +505,7 @@ export default function WatchlistPage() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <input
               type="text"
-              placeholder="Search US stocks (e.g., AAPL, Apple, Tesla)..."
+              placeholder="Search stocks (e.g., AAPL, Apple, Tesla)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-12 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -658,14 +658,14 @@ export default function WatchlistPage() {
           <Card>
             <CardContent className="p-6 text-center">
               <Search className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">Search for US Stocks</h3>
+              <h3 className="text-lg font-medium mb-2">Search for Stocks</h3>
               <p className="text-muted-foreground mb-4">
                 Start typing to search for stocks by symbol, company name, or sector
               </p>
               <div className="text-sm text-muted-foreground space-y-2">
                 <div>Popular searches: <strong>AAPL</strong>, <strong>Tesla</strong>, <strong>Microsoft</strong>, <strong>IBM</strong></div>
                 <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded text-green-700 dark:text-green-300 text-xs">
-                  🚀 <strong>NEW:</strong> Search ANY US stock - now powered by Polygon.io API!
+                  🚀 <strong>NEW:</strong> Search ANY stock - now powered by multi-source API!
                 </div>
               </div>
             </CardContent>
@@ -685,7 +685,7 @@ export default function WatchlistPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalItems}</div>
-            <p className="text-xs text-muted-foreground">US stocks tracked</p>
+            <p className="text-xs text-muted-foreground">Stocks tracked</p>
           </CardContent>
         </Card>
         <Card>
@@ -821,7 +821,7 @@ export default function WatchlistPage() {
               <p className="text-sm text-muted-foreground mt-1">
                 {searchQuery 
                   ? 'Try adjusting your search' 
-                  : 'Add some US stocks to start tracking their performance'
+                  : 'Add some stocks to start tracking their performance'
                 }
               </p>
               {!searchQuery && (

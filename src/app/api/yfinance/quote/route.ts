@@ -32,7 +32,10 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`API: Successfully fetched yfinance quote for ${symbol}`)
-    return NextResponse.json(result)
+    return NextResponse.json({
+      success: true,
+      stock: result.stock
+    })
 
   } catch (error) {
     console.error('API: yfinance quote error:', error)

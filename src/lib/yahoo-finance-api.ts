@@ -55,8 +55,13 @@ export class YahooFinanceAPI {
       }
 
       const result = data.chart.result[0]
-      const quote = result.quote[0]
+      const quote = result.quote && result.quote.length > 0 ? result.quote[0] : null
       const meta = result.meta
+
+      if (!meta || !meta.regularMarketPrice) {
+        console.log(`❌ No valid market data for ${symbol}`)
+        return null
+      }
 
       // Get additional company info
       const companyInfo = await this.getCompanyInfo(symbol)
@@ -64,22 +69,22 @@ export class YahooFinanceAPI {
       // Map to our Stock interface
       const stock: Stock = {
         symbol: symbol.toUpperCase(),
-        name: companyInfo.name || meta.symbol,
+        name: companyInfo.name || meta.symbol || symbol.toUpperCase(),
         price: meta.regularMarketPrice || 0,
-        change: meta.regularMarketPrice - (meta.previousClose || meta.regularMarketPrice),
-        changePercent: ((meta.regularMarketPrice - (meta.previousClose || meta.regularMarketPrice)) / (meta.previousClose || meta.regularMarketPrice)) * 100,
-        volume: quote.volume || 0,
+        change: (meta.regularMarketPrice || 0) - (meta.previousClose || meta.regularMarketPrice || 0),
+        changePercent: meta.previousClose ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100 : 0,
+        volume: quote?.volume || 0,
         marketCap: companyInfo.marketCap || 0,
         pe: companyInfo.pe || 0,
         dividend: companyInfo.dividend || 0,
         sector: companyInfo.sector || 'Unknown',
         industry: companyInfo.industry || 'Unknown',
         exchange: this.mapExchange(meta.exchangeName),
-        dayHigh: quote.high || meta.regularMarketPrice,
-        dayLow: quote.low || meta.regularMarketPrice,
-        fiftyTwoWeekHigh: companyInfo.fiftyTwoWeekHigh || meta.regularMarketPrice,
-        fiftyTwoWeekLow: companyInfo.fiftyTwoWeekLow || meta.regularMarketPrice,
-        avgVolume: companyInfo.avgVolume || quote.volume || 0,
+        dayHigh: quote?.high || meta.regularMarketPrice || 0,
+        dayLow: quote?.low || meta.regularMarketPrice || 0,
+        fiftyTwoWeekHigh: companyInfo.fiftyTwoWeekHigh || meta.regularMarketPrice || 0,
+        fiftyTwoWeekLow: companyInfo.fiftyTwoWeekLow || meta.regularMarketPrice || 0,
+        avgVolume: companyInfo.avgVolume || quote?.volume || 0,
         dividendYield: companyInfo.dividendYield || 0,
         beta: companyInfo.beta || 0,
         eps: companyInfo.eps || 0,

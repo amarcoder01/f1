@@ -28,6 +28,8 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.development
+.env.production
 
 # vercel
 .vercel
@@ -134,4 +136,34 @@ temp/
 .yarn/unplugged
 .yarn/build-state.yml
 .yarn/install-state.gz
-.pnp.* 
+.pnp.*
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# QLib data (large files)
+qlib_data/
+data/
+
+# Test files
+test_*.js
+test_*.py
+*_test.js
+*_test.py
+
+# Documentation files (keep only essential ones)
+*.md
+!README.md
+!DEPLOYMENT.md
+
+# Render specific
+.render-buildlogs/ 

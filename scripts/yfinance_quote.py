@@ -2,6 +2,7 @@
 import yfinance as yf
 import json
 import sys
+from datetime import datetime, timedelta
 
 def get_stock_quote(symbol):
     try:
@@ -75,11 +76,50 @@ def get_stock_quote(symbol):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+def get_chart_data(symbol, range='1d', interval='1m'):
+    try:
+        # Get ticker data
+        ticker = yf.Ticker(symbol)
+        
+        # Get historical data
+        hist = ticker.history(period=range, interval=interval)
+        
+        if hist.empty:
+            return {"success": False, "error": f"No data available for {symbol}"}
+        
+        # Convert to chart data format
+        data = []
+        for index, row in hist.iterrows():
+            data_point = {
+                "time": int(index.timestamp() * 1000),  # Convert to milliseconds
+                "open": float(row['Open']),
+                "high": float(row['High']),
+                "low": float(row['Low']),
+                "close": float(row['Close']),
+                "volume": int(row['Volume'])
+            }
+            data.append(data_point)
+        
+        return {"success": True, "data": data}
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2:
         print(json.dumps({"success": False, "error": "Symbol argument required"}))
         sys.exit(1)
     
     symbol = sys.argv[1]
-    result = get_stock_quote(symbol)
+    
+    # Check if we need chart data or stock quote
+    if len(sys.argv) >= 4:
+        # Chart data request: symbol, range, interval
+        range_param = sys.argv[2]
+        interval_param = sys.argv[3]
+        result = get_chart_data(symbol, range_param, interval_param)
+    else:
+        # Stock quote request
+        result = get_stock_quote(symbol)
+    
     print(json.dumps(result))

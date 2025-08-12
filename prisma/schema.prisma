@@ -15,6 +15,7 @@ model User {
   portfolios    Portfolio[]
   watchlists    Watchlist[]
   chatSessions  ChatSession[]
+  paperTradingAccounts PaperTradingAccount[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -92,4 +93,81 @@ model ChatMessage {
   sender      String
 
   session     ChatSession @relation(fields: [sessionId], references: [id])
+}
+
+// Paper Trading Models
+model PaperTradingAccount {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  initialBalance Float   @default(100000) // $100,000 starting balance
+  currentBalance Float   @default(100000)
+  availableCash Float    @default(100000)
+  totalValue   Float     @default(100000)
+  totalPnL     Float     @default(0)
+  totalPnLPercent Float  @default(0)
+  isActive     Boolean   @default(true)
+  positions    PaperPosition[]
+  orders       PaperOrder[]
+  transactions PaperTransaction[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+model PaperPosition {
+  id          String    @id @default(cuid())
+  accountId   String
+  symbol      String
+  name        String
+  quantity    Float
+  averagePrice Float
+  currentPrice Float
+  marketValue Float
+  unrealizedPnL Float
+  unrealizedPnLPercent Float
+  type        String    @default("stock") // stock, etf, etc.
+  exchange    String?
+  sector      String?
+  entryDate   DateTime  @default(now())
+  lastUpdated DateTime  @default(now())
+
+  account     PaperTradingAccount @relation(fields: [accountId], references: [id])
+}
+
+model PaperOrder {
+  id          String    @id @default(cuid())
+  accountId   String
+  symbol      String
+  type        String    // market, limit, stop, stop-limit
+  side        String    // buy, sell
+  quantity    Float
+  price       Float?
+  stopPrice   Float?
+  status      String    @default("pending") // pending, filled, cancelled, rejected
+  filledQuantity Float  @default(0)
+  averagePrice Float?
+  commission  Float     @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  account     PaperTradingAccount @relation(fields: [accountId], references: [id])
+}
+
+model PaperTransaction {
+  id          String    @id @default(cuid())
+  accountId   String
+  orderId     String?
+  symbol      String
+  type        String    // buy, sell, dividend, deposit, withdrawal
+  quantity    Float?
+  price       Float?
+  amount      Float
+  commission  Float     @default(0)
+  description String?
+  timestamp   DateTime  @default(now())
+
+  account     PaperTradingAccount @relation(fields: [accountId], references: [id])
 }

@@ -70,6 +70,15 @@ export interface CandleData {
   volume: number
 }
 
+export interface OHLCVData {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
 export interface LineData {
   time: number
   value: number
@@ -163,10 +172,10 @@ export interface NewsItem {
   sentiment: 'positive' | 'negative' | 'neutral'
 }
 
-// AI Chat Types
+// Chat Types
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
   metadata?: {
@@ -175,12 +184,98 @@ export interface ChatMessage {
   }
 }
 
+export interface AIChatMessage extends ChatMessage {
+  toolCalls?: ToolCall[]
+  toolResults?: ToolResult[]
+  metadata?: {
+    symbols?: string[]
+    confidence?: number
+    riskLevel?: 'low' | 'medium' | 'high'
+    timeframe?: string
+    analysisType?: string
+    responseType?: 'text' | 'chart' | 'table' | 'code' | 'alert' | 'strategy'
+  }
+}
+
+export interface ToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string
+  }
+}
+
+export interface ToolResult {
+  toolCallId: string
+  content: string
+  error?: string
+}
+
 export interface ChatSession {
   id: string
   title: string
-  messages: ChatMessage[]
+  messages: AIChatMessage[]
   createdAt: Date
   updatedAt: Date
+  metadata?: {
+    symbols?: string[]
+    tradingFocus?: boolean
+    lastActivity?: Date
+  }
+}
+
+// Trading Strategy Types
+export interface TradingStrategy {
+  symbol: string
+  strategy: 'long' | 'short' | 'options' | 'swing' | 'day_trade'
+  entry: number
+  stopLoss: number
+  targets: number[]
+  timeframe: string
+  confidence: number
+  reasoning: string
+  riskLevel: 'low' | 'medium' | 'high'
+  technicalIndicators?: {
+    rsi?: number
+    macd?: string
+    support?: number[]
+    resistance?: number[]
+  }
+  marketConditions?: {
+    trend: 'bullish' | 'bearish' | 'sideways'
+    volatility: 'low' | 'medium' | 'high'
+    volume: 'above_average' | 'average' | 'below_average'
+  }
+}
+
+// Rich Response Types
+export interface RichResponse {
+  type: 'text' | 'chart' | 'table' | 'code' | 'alert' | 'strategy'
+  content: string
+  metadata: {
+    symbols?: string[]
+    confidence?: number
+    riskLevel?: 'low' | 'medium' | 'high'
+    timeframe?: string
+    analysisType?: string
+    chartData?: any
+    tableData?: any
+  }
+}
+
+// AI Tool Types
+export interface AITool {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: {
+      type: 'object'
+      properties: Record<string, any>
+      required: string[]
+    }
+  }
 }
 
 // UI State Types
@@ -200,7 +295,7 @@ export interface Notification {
   read: boolean
 }
 
-// Settings Types
+// User Settings Types
 export interface UserSettings {
   theme: 'light' | 'dark' | 'system'
   currency: string
@@ -245,8 +340,102 @@ export interface RealTimeData {
   timestamp: Date
 }
 
+// WebSocket Types
 export interface WebSocketMessage {
   type: 'price_update' | 'order_update' | 'news_update' | 'chat_message'
   data: any
   timestamp: Date
+}
+
+// Paper Trading Types
+export interface PaperTradingAccount {
+  id: string
+  userId: string
+  name: string
+  initialBalance: number
+  currentBalance: number
+  availableCash: number
+  totalValue: number
+  totalPnL: number
+  totalPnLPercent: number
+  isActive: boolean
+  positions: PaperPosition[]
+  orders: PaperOrder[]
+  transactions: PaperTransaction[]
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface PaperPosition {
+  id: string
+  accountId: string
+  symbol: string
+  name: string
+  quantity: number
+  averagePrice: number
+  currentPrice: number
+  marketValue: number
+  unrealizedPnL: number
+  unrealizedPnLPercent: number
+  type: string
+  exchange?: string
+  sector?: string
+  entryDate: Date
+  lastUpdated: Date
+}
+
+export interface PaperOrder {
+  id: string
+  accountId: string
+  symbol: string
+  type: 'market' | 'limit' | 'stop' | 'stop-limit'
+  side: 'buy' | 'sell'
+  quantity: number
+  price?: number
+  stopPrice?: number
+  status: 'pending' | 'filled' | 'cancelled' | 'rejected'
+  filledQuantity: number
+  averagePrice?: number
+  commission: number
+  notes?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface PaperTransaction {
+  id: string
+  accountId: string
+  orderId?: string
+  symbol: string
+  type: 'buy' | 'sell' | 'dividend' | 'deposit' | 'withdrawal'
+  quantity?: number
+  price?: number
+  amount: number
+  commission: number
+  description?: string
+  timestamp: Date
+}
+
+export interface PaperTradingStats {
+  totalTrades: number
+  winningTrades: number
+  losingTrades: number
+  winRate: number
+  averageWin: number
+  averageLoss: number
+  profitFactor: number
+  maxDrawdown: number
+  sharpeRatio: number
+  totalReturn: number
+  annualizedReturn: number
+}
+
+export interface PaperTradingPerformance {
+  dailyReturns: { date: string; return: number }[]
+  monthlyReturns: { month: string; return: number }[]
+  yearlyReturns: { year: string; return: number }[]
+  drawdown: { date: string; drawdown: number }[]
+  volatility: number
+  beta: number
+  alpha: number
 }

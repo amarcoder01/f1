@@ -5,7 +5,7 @@ export class YFinanceAPI {
   private static cache = new Map<string, { data: Stock; timestamp: number }>()
   private static CACHE_DURATION = 60000 // 1 minute cache
 
-  // Get stock data from yfinance via our API route
+  // Get stock data from yfinance via API route
   async getStockData(symbol: string): Promise<Stock | null> {
     try {
       // Check cache first
@@ -17,7 +17,8 @@ export class YFinanceAPI {
       console.log(`📡 Fetching data for ${symbol} from yfinance...`)
 
       // Use our yfinance API route
-      const response = await fetch(`/api/yfinance/quote?symbol=${encodeURIComponent(symbol)}`)
+      const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000')
+      const response = await fetch(`${baseUrl}/api/yfinance/quote?symbol=${encodeURIComponent(symbol)}`)
 
       if (!response.ok) {
         console.log(`❌ yfinance failed for ${symbol}:`, response.status)
@@ -50,7 +51,8 @@ export class YFinanceAPI {
     try {
       console.log(`🔍 Searching stocks for "${query}" via yfinance...`)
       
-      const response = await fetch(`/api/yfinance/search?q=${encodeURIComponent(query)}`)
+      const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000')
+      const response = await fetch(`${baseUrl}/api/yfinance/search?q=${encodeURIComponent(query)}`)
 
       if (!response.ok) {
         console.log(`❌ yfinance search failed:`, response.status)

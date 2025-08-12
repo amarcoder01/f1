@@ -9,7 +9,12 @@ import {
   ChevronRight,
   Home,
   Bot,
-  Globe
+  Globe,
+  Search,
+  BarChart3,
+  Play,
+  Wrench,
+  TrendingUp
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store'
@@ -34,11 +39,26 @@ const sidebarItems: SidebarItem[] = [
     description: 'Overview of your trading activity'
   },
   {
+    id: 'market',
+    label: 'Market Explorer',
+    icon: BarChart3,
+    href: '/market',
+    description: 'Search stocks and analyze markets'
+  },
+  {
     id: 'watchlist',
     label: 'Watchlist',
     icon: Eye,
     href: '/watchlist',
     description: 'Track your favorite assets'
+  },
+  {
+    id: 'paper-trading',
+    label: 'Paper Trading',
+    icon: Play,
+    href: '/paper-trading',
+    description: 'Practice trading with virtual money',
+    badge: 'NEW'
   },
   {
     id: 'treadgpt',
@@ -47,6 +67,22 @@ const sidebarItems: SidebarItem[] = [
     href: '/treadgpt',
     description: 'AI-powered trading assistant',
     badge: 'AI'
+  },
+  {
+    id: 'tools',
+    label: 'Tools',
+    icon: Wrench,
+    href: '/tools',
+    description: 'Professional backtesting and strategy analysis',
+    badge: 'BACKTEST'
+  },
+  {
+    id: 'advanced-charts',
+    label: 'Advanced Charts',
+    icon: TrendingUp,
+    href: '/advanced-charts',
+    description: 'Professional charting with 50+ indicators',
+    badge: 'PRO'
   }
 ]
 
