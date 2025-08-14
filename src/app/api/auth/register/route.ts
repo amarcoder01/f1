@@ -1,30 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-
-// Mock user database - in production, this would be a real database
-let users = [
-  {
-    id: '1',
-    email: 'demo@vidality.com',
-    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password
-    firstName: 'Demo',
-    lastName: 'User',
-    isEmailVerified: true,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    preferences: {
-      theme: 'system',
-      currency: 'USD',
-      timezone: 'UTC',
-      notifications: {
-        email: true,
-        push: true,
-        sms: false
-      }
-    }
-  }
-]
+import { findUserByEmail, createUser, hashPassword } from '@/lib/auth-storage'
+import { registerRateLimiter } from '@/lib/rate-limiter'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
@@ -40,8 +17,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Rate limiting
+    const clientIP = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
+    const rateLimitKey = `register:${clientIP}`
+    
+    if (!registerRateLimiter.isAllowed(rateLimitKey)) {
+      const remainingTime = registerRateLimiter.getRemainingTime(rateLimitKey)
+      return NextResponse.json(
+        { 
+          message: 'Too many registration attempts. Please try again later.',
+          retryAfter: Math.ceil(remainingTime / 1000)
+        },
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil(remainingTime / 1000).toString()
+          }
+        }
+      )
+    }
+
     // Check if user already exists
-    const existingUser = users.find(u => u.email === email)
+    const existingUser = findUserByEmail(email)
     if (existingUser) {
       return NextResponse.json(
         { message: 'User with this email already exists' },
@@ -50,26 +47,84 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate password strength
-    if (password.length < 6) {
+    if (password.length < 8) {
       return NextResponse.json(
-        { message: 'Password must be at least 6 characters long' },
+        { message: 'Password must be at least 8 characters long' },
+        { status: 400 }
+      )
+    }
+
+    // Check for password complexity
+    if (!/(?=.*[a-z])/.test(password)) {
+      return NextResponse.json(
+        { message: 'Password must contain at least one lowercase letter' },
+        { status: 400 }
+      )
+    }
+
+    if (!/(?=.*[A-Z])/.test(password)) {
+      return NextResponse.json(
+        { message: 'Password must contain at least one uppercase letter' },
+        { status: 400 }
+      )
+    }
+
+    if (!/(?=.*\d)/.test(password)) {
+      return NextResponse.json(
+        { message: 'Password must contain at least one number' },
+        { status: 400 }
+      )
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        { message: 'Please enter a valid email address' },
+        { status: 400 }
+      )
+    }
+
+    // Validate names
+    if (!firstName.trim() || firstName.trim().length < 2) {
+      return NextResponse.json(
+        { message: 'First name must be at least 2 characters long' },
+        { status: 400 }
+      )
+    }
+
+    if (!lastName.trim() || lastName.trim().length < 2) {
+      return NextResponse.json(
+        { message: 'Last name must be at least 2 characters long' },
+        { status: 400 }
+      )
+    }
+
+    // Validate name format (only letters and spaces)
+    if (!/^[a-zA-Z\s]+$/.test(firstName.trim())) {
+      return NextResponse.json(
+        { message: 'First name can only contain letters and spaces' },
+        { status: 400 }
+      )
+    }
+
+    if (!/^[a-zA-Z\s]+$/.test(lastName.trim())) {
+      return NextResponse.json(
+        { message: 'Last name can only contain letters and spaces' },
         { status: 400 }
       )
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await hashPassword(password)
 
     // Create new user
-    const newUser = {
-      id: (users.length + 1).toString(),
-      email,
+    const newUser = createUser({
+      email: email.toLowerCase().trim(),
       password: hashedPassword,
-      firstName,
-      lastName,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       isEmailVerified: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       preferences: {
         theme: 'system',
         currency: 'USD',
@@ -80,10 +135,7 @@ export async function POST(request: NextRequest) {
           sms: false
         }
       }
-    }
-
-    // Add user to database
-    users.push(newUser)
+    })
 
     // Create JWT token
     const token = jwt.sign(

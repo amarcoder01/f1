@@ -154,14 +154,7 @@ export function LoginModal({ isOpen, onClose, onSwitchToRegister }: LoginModalPr
                 )}
               </Button>
 
-              {/* Demo Account Info */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-xs text-blue-700">
-                  <strong>Demo Account:</strong><br />
-                  Email: demo@vidality.com<br />
-                  Password: password
-                </p>
-              </div>
+
 
               {/* Switch to Register */}
               <div className="text-center">

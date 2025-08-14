@@ -1,30 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-
-// Mock user database - in production, this would be a real database
-const users = [
-  {
-    id: '1',
-    email: 'demo@vidality.com',
-    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password
-    firstName: 'Demo',
-    lastName: 'User',
-    isEmailVerified: true,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    preferences: {
-      theme: 'system',
-      currency: 'USD',
-      timezone: 'UTC',
-      notifications: {
-        email: true,
-        push: true,
-        sms: false
-      }
-    }
-  }
-]
+import { findUserByEmail, verifyPassword } from '@/lib/auth-storage'
+import { authRateLimiter } from '@/lib/rate-limiter'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
@@ -40,8 +17,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Rate limiting
+    const clientIP = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
+    const rateLimitKey = `login:${clientIP}:${email.toLowerCase()}`
+    
+    if (!authRateLimiter.isAllowed(rateLimitKey)) {
+      const remainingTime = authRateLimiter.getRemainingTime(rateLimitKey)
+      return NextResponse.json(
+        { 
+          message: 'Too many login attempts. Please try again later.',
+          retryAfter: Math.ceil(remainingTime / 1000)
+        },
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil(remainingTime / 1000).toString()
+          }
+        }
+      )
+    }
+
     // Find user
-    const user = users.find(u => u.email === email)
+    const user = findUserByEmail(email)
     if (!user) {
       return NextResponse.json(
         { message: 'Invalid email or password' },
@@ -50,13 +47,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password)
+    const isValidPassword = await verifyPassword(password, user.password)
     if (!isValidPassword) {
       return NextResponse.json(
         { message: 'Invalid email or password' },
         { status: 401 }
       )
     }
+
+    // Reset rate limit on successful login
+    authRateLimiter.reset(rateLimitKey)
 
     // Create JWT token
     const token = jwt.sign(

@@ -23,27 +23,82 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   
   const { register, error, clearError } = useAuthStore()
+
+  // Validation functions
+  const validateEmail = (email: string): string => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!email) return 'Email is required'
+    if (!emailRegex.test(email)) return 'Please enter a valid email address'
+    return ''
+  }
+
+  const validatePassword = (password: string): string => {
+    if (!password) return 'Password is required'
+    if (password.length < 8) return 'Password must be at least 8 characters long'
+    if (!/(?=.*[a-z])/.test(password)) return 'Password must contain at least one lowercase letter'
+    if (!/(?=.*[A-Z])/.test(password)) return 'Password must contain at least one uppercase letter'
+    if (!/(?=.*\d)/.test(password)) return 'Password must contain at least one number'
+    return ''
+  }
+
+  const validateConfirmPassword = (confirmPassword: string, password: string): string => {
+    if (!confirmPassword) return 'Please confirm your password'
+    if (confirmPassword !== password) return 'Passwords do not match'
+    return ''
+  }
+
+  const validateName = (name: string, fieldName: string): string => {
+    if (!name.trim()) return `${fieldName} is required`
+    if (name.trim().length < 2) return `${fieldName} must be at least 2 characters long`
+    if (!/^[a-zA-Z\s]+$/.test(name.trim())) return `${fieldName} can only contain letters and spaces`
+    return ''
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (password !== confirmPassword) {
+    // Clear previous errors
+    setValidationErrors({})
+    clearError()
+    
+    // Validate all fields
+    const errors: Record<string, string> = {}
+    
+    const firstNameError = validateName(firstName, 'First name')
+    if (firstNameError) errors.firstName = firstNameError
+    
+    const lastNameError = validateName(lastName, 'Last name')
+    if (lastNameError) errors.lastName = lastNameError
+    
+    const emailError = validateEmail(email)
+    if (emailError) errors.email = emailError
+    
+    const passwordError = validatePassword(password)
+    if (passwordError) errors.password = passwordError
+    
+    const confirmPasswordError = validateConfirmPassword(confirmPassword, password)
+    if (confirmPasswordError) errors.confirmPassword = confirmPasswordError
+    
+    // If there are validation errors, don't submit
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors)
       return
     }
     
     setIsLoading(true)
-    clearError()
     
     try {
-      await register({ email, password, firstName, lastName })
+      await register({ email, password, firstName: firstName.trim(), lastName: lastName.trim() })
       onClose()
       setFirstName('')
       setLastName('')
       setEmail('')
       setPassword('')
       setConfirmPassword('')
+      setValidationErrors({})
     } catch (error) {
       console.error('Registration failed:', error)
     } finally {
@@ -53,6 +108,7 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
 
   const handleClose = () => {
     clearError()
+    setValidationErrors({})
     setFirstName('')
     setLastName('')
     setEmail('')
@@ -61,7 +117,14 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
     onClose()
   }
 
-  const isFormValid = firstName && lastName && email && password && confirmPassword && password === confirmPassword
+  const isFormValid = 
+    firstName.trim() && 
+    lastName.trim() && 
+    email && 
+    password && 
+    confirmPassword && 
+    password === confirmPassword &&
+    Object.keys(validationErrors).length === 0
 
   return (
     <AnimatePresence>
@@ -110,11 +173,14 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       placeholder="First name"
-                      className="pl-10"
+                      className={`pl-10 ${validationErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}`}
                       required
                       disabled={isLoading}
                     />
                   </div>
+                  {validationErrors.firstName && (
+                    <p className="text-xs text-red-500">{validationErrors.firstName}</p>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -129,11 +195,14 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
                       placeholder="Last name"
-                      className="pl-10"
+                      className={`pl-10 ${validationErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}`}
                       required
                       disabled={isLoading}
                     />
                   </div>
+                  {validationErrors.lastName && (
+                    <p className="text-xs text-red-500">{validationErrors.lastName}</p>
+                  )}
                 </div>
               </div>
 
@@ -150,11 +219,14 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter your email"
-                    className="pl-10"
+                    className={`pl-10 ${validationErrors.email ? 'border-red-500 focus:border-red-500' : ''}`}
                     required
                     disabled={isLoading}
                   />
                 </div>
+                {validationErrors.email && (
+                  <p className="text-xs text-red-500">{validationErrors.email}</p>
+                )}
               </div>
 
               {/* Password Field */}
@@ -170,7 +242,7 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Create a password"
-                    className="pl-10 pr-10"
+                    className={`pl-10 pr-10 ${validationErrors.password ? 'border-red-500 focus:border-red-500' : ''}`}
                     required
                     disabled={isLoading}
                   />
@@ -183,7 +255,13 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-gray-500">Must be at least 6 characters long</p>
+                {validationErrors.password ? (
+                  <p className="text-xs text-red-500">{validationErrors.password}</p>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    Must be at least 8 characters with uppercase, lowercase, and number
+                  </p>
+                )}
               </div>
 
               {/* Confirm Password Field */}
@@ -199,7 +277,7 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm your password"
-                    className="pl-10 pr-10"
+                    className={`pl-10 pr-10 ${validationErrors.confirmPassword ? 'border-red-500 focus:border-red-500' : ''}`}
                     required
                     disabled={isLoading}
                   />
@@ -212,8 +290,8 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                {confirmPassword && password !== confirmPassword && (
-                  <p className="text-xs text-red-500">Passwords do not match</p>
+                {validationErrors.confirmPassword && (
+                  <p className="text-xs text-red-500">{validationErrors.confirmPassword}</p>
                 )}
               </div>
 
