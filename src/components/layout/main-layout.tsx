@@ -4,7 +4,7 @@ import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
-import Footer from './Footer'
+import { Footer } from './Footer'
 import { useUIStore } from '@/store'
 
 interface MainLayoutProps {

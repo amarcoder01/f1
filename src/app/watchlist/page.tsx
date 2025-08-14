@@ -34,7 +34,9 @@ export default function WatchlistPage() {
     isLoading: storeLoading,
     isConnectedToRealTime,
     startRealTimeUpdates,
-    stopRealTimeUpdates
+    stopRealTimeUpdates,
+    isHydrated,
+    setHydrated
   } = useWatchlistStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Stock[]>([])  
@@ -47,13 +49,21 @@ export default function WatchlistPage() {
   const [loadingStocks, setLoadingStocks] = useState<Set<string>>(new Set())
 
   // Get or create default watchlist
-  const defaultWatchlist = watchlists.find(w => w.name === 'My Watchlist') || {
+  const defaultWatchlist = watchlists?.find(w => w.name === 'My Watchlist') || {
     id: 'default',
     name: 'My Watchlist',
     items: [],
     createdAt: new Date(),
     updatedAt: new Date()
   }
+
+  // Handle hydration on client side
+  useEffect(() => {
+    // Mark as hydrated after component mounts on client
+    if (typeof window !== 'undefined') {
+      setHydrated(true)
+    }
+  }, [setHydrated])
 
   // Load watchlists on component mount
   useEffect(() => {
@@ -71,7 +81,7 @@ export default function WatchlistPage() {
 
   // Refresh watchlist data when component mounts if there are items
   useEffect(() => {
-    if (defaultWatchlist.items.length > 0 && !storeLoading) {
+    if (defaultWatchlist?.items?.length > 0 && !storeLoading) {
       // Small delay to ensure store is fully loaded
       const timer = setTimeout(() => {
         validateAndFixWatchlistSymbols()
@@ -80,12 +90,17 @@ export default function WatchlistPage() {
       
       return () => clearTimeout(timer)
     }
-  }, [defaultWatchlist.items.length, storeLoading])
+  }, [defaultWatchlist?.items?.length, storeLoading])
 
   // Function to validate and fix invalid symbols
   const validateAndFixWatchlistSymbols = async () => {
     try {
       const { updateWatchlistItem, removeFromWatchlist } = useWatchlistStore.getState()
+      
+      // Check if defaultWatchlist exists and has items
+      if (!defaultWatchlist?.items?.length) {
+        return
+      }
       
       // Common symbol corrections
       const symbolCorrections: { [key: string]: string } = {
@@ -97,7 +112,7 @@ export default function WatchlistPage() {
         'PFE': 'PFE'    // Already correct
       }
       
-      for (const item of defaultWatchlist.items) {
+      for (const item of defaultWatchlist?.items || []) {
         // Check if symbol needs correction
         if (symbolCorrections[item.symbol]) {
           const correctSymbol = symbolCorrections[item.symbol]
@@ -109,7 +124,7 @@ export default function WatchlistPage() {
               const data = await response.json()
               if (data.stock && data.stock.price > 0) {
                 // Update the symbol and data
-                updateWatchlistItem(defaultWatchlist.id, item.id, {
+                updateWatchlistItem(defaultWatchlist?.id || 'default', item.id, {
                   symbol: correctSymbol,
                   name: data.stock.name,
                   price: data.stock.price,
@@ -135,7 +150,7 @@ export default function WatchlistPage() {
               // Remove invalid symbols that can't be fixed
               if (!symbolCorrections[item.symbol]) {
                 console.log(`🗑️ Removing invalid symbol: ${item.symbol}`)
-                await removeFromWatchlist(defaultWatchlist.id, item.id)
+                await removeFromWatchlist(defaultWatchlist?.id || 'default', item.id)
               }
             }
           }
@@ -150,15 +165,15 @@ export default function WatchlistPage() {
 
   // If no default watchlist exists, create one
   useEffect(() => {
-    if (watchlists.length === 0 && !storeLoading) {
+    if (watchlists?.length === 0 && !storeLoading) {
       createWatchlist('My Watchlist')
     }
   }, [watchlists, createWatchlist, storeLoading])
 
   // Start real-time updates for watchlist items using multi-source
   useEffect(() => {
-    if (defaultWatchlist.items.length > 0) {
-      const symbols = defaultWatchlist.items.map(item => item.symbol)
+    if (defaultWatchlist?.items?.length > 0) {
+      const symbols = defaultWatchlist?.items?.map(item => item.symbol) || []
       
       // Set up periodic updates for all symbols
       const updateInterval = setInterval(async () => {
@@ -170,9 +185,9 @@ export default function WatchlistPage() {
             try {
               const freshData = await getStockData(symbol)
               if (freshData && freshData.price > 0) {
-                const existingItem = defaultWatchlist.items.find(item => item.symbol === symbol)
+                const existingItem = defaultWatchlist?.items?.find(item => item.symbol === symbol)
                 if (existingItem) {
-                  updateWatchlistItem(defaultWatchlist.id, existingItem.id, {
+                  updateWatchlistItem(defaultWatchlist?.id || 'default', existingItem.id, {
                     price: freshData.price,
                     change: freshData.change,
                     changePercent: freshData.changePercent,
@@ -193,11 +208,11 @@ export default function WatchlistPage() {
         clearInterval(updateInterval)
       }
     }
-  }, [defaultWatchlist.items])
+  }, [defaultWatchlist?.items])
 
   // Start real-time updates when watchlist has items
   useEffect(() => {
-    if (defaultWatchlist && defaultWatchlist.items.length > 0 && !isConnectedToRealTime) {
+    if (defaultWatchlist && defaultWatchlist?.items?.length > 0 && !isConnectedToRealTime) {
       try {
         startRealTimeUpdates()
       } catch (error) {
@@ -213,10 +228,10 @@ export default function WatchlistPage() {
     }
   }, [defaultWatchlist?.items.length, isConnectedToRealTime, startRealTimeUpdates, stopRealTimeUpdates])
 
-  // Enhanced search functionality using Polygon API (optimized for $29 plan)
+  // Enhanced search functionality using simplified API
   useEffect(() => {
     const searchStocks = async () => {
-      if (!searchQuery || searchQuery.length < 2) {
+      if (!searchQuery || searchQuery.length < 1) {
         setSearchResults([])
         setIsAddingSymbol(false)
         setError(null)
@@ -237,7 +252,7 @@ export default function WatchlistPage() {
       try {
         console.log(`🔍 Searching for: "${searchQuery}"`)
         
-        // Use the Next.js API route for search
+        // Use the simplified Next.js API route for search
         const response = await fetch(`/api/stocks/search?q=${encodeURIComponent(searchQuery)}`)
         
         if (!response.ok) {
@@ -249,31 +264,23 @@ export default function WatchlistPage() {
         setSearchResults(results)
         
         if (results.length === 0) {
-          setError(`No stocks found for "${searchQuery}". Try searching with a different term or check your API configuration.`)
+          setError(`No stocks found for "${searchQuery}". Try searching with a different term.`)
         } else {
           console.log(`✅ Found ${results.length} stocks for "${searchQuery}"`)
         }
       } catch (error) {
         console.error('❌ Error searching stocks:', error)
-        let errorMessage = 'Search failed. Please check your internet connection and API configuration.'
+        let errorMessage = 'Search failed. Please check your internet connection.'
         
         if (error instanceof Error) {
-          if (error.message.includes('API key')) {
-            errorMessage = '🔑 Polygon API key is missing or invalid. Please check POLYGON_SETUP.md for setup instructions.'
-          } else if (error.message.includes('Rate limit')) {
-            errorMessage = '⏱️ Rate limit exceeded ($29 plan: 5 requests/minute). Please wait a moment before searching again.'
-          } else if (error.message.includes('404') || error.message.includes('Not Found')) {
+          if (error.message.includes('404') || error.message.includes('Not Found')) {
             errorMessage = `📊 No stock data found for "${searchQuery}". Please check the symbol and try again.`
           } else if (error.message.includes('server error') || error.message.includes('500')) {
-            errorMessage = '🔧 Polygon API is temporarily unavailable. Please try again later.'
+            errorMessage = '🔧 Search service is temporarily unavailable. Please try again later.'
           } else if (error.message.includes('Network') || error.message.includes('fetch')) {
             errorMessage = '🌐 Network error. Please check your internet connection.'
           } else if (error.message.includes('timeout')) {
             errorMessage = '⏱️ Request timed out. Please try again with a shorter search term.'
-          } else if (error.message.includes('forbidden') || error.message.includes('403')) {
-            errorMessage = '🚫 Access forbidden. Please check your Polygon.io subscription status.'
-          } else if (error.message.includes('unauthorized') || error.message.includes('401')) {
-            errorMessage = '🔐 Authentication failed. Please verify your API key is correct.'
           }
         }
         
@@ -284,86 +291,96 @@ export default function WatchlistPage() {
       }
     }
 
-    const debounceTimeout = setTimeout(searchStocks, 500) // Increased debounce for $29 plan
+    const debounceTimeout = setTimeout(searchStocks, 300) // Reduced debounce for better UX
     return () => clearTimeout(debounceTimeout)
   }, [searchQuery])
 
   // Filter watchlist items
-  const filteredItems = defaultWatchlist.items.filter(item => {
+  const filteredItems = defaultWatchlist?.items?.filter(item => {
     const matchesSearch = item.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.name.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesSearch
-  })
+  }) || []
 
   const handleAddToWatchlist = async (stock: Stock) => {
     try {
       setError(null)
       setIsAddingSymbol(true)
       
-      // Fetch fresh data for the stock before adding
-      const response = await fetch(`/api/stocks/quote?symbol=${encodeURIComponent(stock.symbol)}`)
-      let freshStockData = stock
+      console.log(`🔍 Starting to add ${stock.symbol} to watchlist...`)
+      console.log(`📊 Stock data:`, stock)
       
-      if (response.ok) {
-        const data = await response.json()
-        if (data.stock && data.stock.price > 0) {
-          freshStockData = data.stock
-          console.log(`✅ Fetched fresh data for ${stock.symbol}:`, freshStockData)
-        } else {
-          // Invalid symbol - don't add to watchlist
-          throw new Error(`Invalid symbol: ${stock.symbol} - No valid data found`)
-        }
-      } else {
-        console.warn(`⚠️ Could not fetch fresh data for ${stock.symbol}, using search data`)
-        // Validate that search data has a valid price
-        if (!stock.price || stock.price <= 0) {
-          throw new Error(`Invalid symbol: ${stock.symbol} - No valid price data`)
-        }
+      // Use the search data directly since it's already validated
+      // The search API already provides valid stock data
+      console.log(`✅ Adding ${stock.symbol} to watchlist with search data:`, stock)
+      
+      // Validate that we have the minimum required data
+      if (!stock.symbol || !stock.name || !stock.price || stock.price <= 0) {
+        console.error(`❌ Invalid stock data for ${stock.symbol}:`, {
+          symbol: stock.symbol,
+          name: stock.name,
+          price: stock.price
+        })
+        throw new Error(`Invalid stock data for ${stock.symbol}`)
       }
       
       const watchlistItem: WatchlistItem = {
         id: Date.now().toString(),
-        symbol: freshStockData.symbol,
-        name: freshStockData.name,
+        symbol: stock.symbol,
+        name: stock.name,
         type: 'stock',
-        price: freshStockData.price,
-        change: freshStockData.change,
-        changePercent: freshStockData.changePercent,
-        volume: freshStockData.volume,
-        sector: freshStockData.sector,
-        industry: freshStockData.industry,
-        exchange: freshStockData.exchange,
-        marketCap: freshStockData.marketCap,
+        price: stock.price,
+        change: stock.change || 0,
+        changePercent: stock.changePercent || 0,
+        volume: stock.volume || 0,
+        sector: stock.sector || 'Technology',
+        industry: stock.industry || 'Technology',
+        exchange: stock.exchange || 'NASDAQ',
+        marketCap: stock.marketCap || 0,
         addedAt: new Date()
       }
       
-      await addToWatchlist(defaultWatchlist.id, watchlistItem)
+      console.log(`📝 Created watchlist item:`, watchlistItem)
+      
+      await addToWatchlist(defaultWatchlist?.id || 'default', watchlistItem)
       setSearchQuery('')
       setSearchResults([])
       setIsAddingSymbol(false)
-    } catch (error) {
-      console.error('Error adding stock to watchlist:', error)
-      setIsAddingSymbol(false)
-      let errorMessage = `Failed to add ${stock.symbol} to watchlist. Please try again.`
-      
-      if (error instanceof Error) {
-        if (error.message.includes('Invalid symbol')) {
-          errorMessage = `${stock.symbol} is not a valid stock symbol. Please check the symbol and try again.`
-        } else if (error.message.includes('duplicate') || error.message.includes('already exists')) {
-          errorMessage = `${stock.symbol} is already in your watchlist.`
-        } else if (error.message.includes('storage') || error.message.includes('quota')) {
-          errorMessage = 'Storage limit reached. Please remove some stocks from your watchlist.'
+      console.log(`✅ Successfully added ${stock.symbol} to watchlist`)
+          } catch (error) {
+        console.error('❌ Error adding stock to watchlist:', error)
+        setIsAddingSymbol(false)
+        let errorMessage = `Failed to add ${stock.symbol} to watchlist. Please try again.`
+        
+        if (error instanceof Error) {
+          console.error('❌ Error details:', error.message)
+          if (error.message.includes('Invalid stock data')) {
+            errorMessage = `${stock.symbol} has invalid data. Please try searching again.`
+          } else if (error.message.includes('duplicate') || error.message.includes('already exists')) {
+            errorMessage = `${stock.symbol} is already in your watchlist.`
+          } else if (error.message.includes('storage') || error.message.includes('quota')) {
+            errorMessage = 'Storage limit reached. Please remove some stocks from your watchlist.'
+          } else if (error.message.includes('Failed to fetch')) {
+            errorMessage = `Network error while adding ${stock.symbol}. Please check your connection.`
+          } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+            errorMessage = `Server error while adding ${stock.symbol}. Please try again later.`
+          } else if (error.message.includes('API Error')) {
+            // Extract the specific error message from API Error
+            const apiErrorMessage = error.message.replace(/^API Error \d+: /, '')
+            errorMessage = `Server error: ${apiErrorMessage}`
+          } else if (error.message.includes('Missing required fields')) {
+            errorMessage = `Invalid stock data for ${stock.symbol}. Please try searching again.`
+          }
         }
+        
+        setError(errorMessage)
       }
-      
-      setError(errorMessage)
-    }
   }
 
   const handleRemoveFromWatchlist = async (itemId: string) => {
     try {
       setError(null)
-      await removeFromWatchlist(defaultWatchlist.id, itemId)
+      await removeFromWatchlist(defaultWatchlist?.id || 'default', itemId)
     } catch (error) {
       console.error('Error removing stock from watchlist:', error)
       setError('Failed to remove stock from watchlist. Please try again.')
@@ -377,12 +394,18 @@ export default function WatchlistPage() {
       
       const { updateWatchlistItem } = useWatchlistStore.getState()
       
+      // Check if defaultWatchlist exists and has items
+      if (!defaultWatchlist?.items?.length) {
+        setIsLoading(false)
+        return
+      }
+      
       // Refresh data for all watchlist items using multi-source
-      const refreshPromises = defaultWatchlist.items.map(async (item) => {
+      const refreshPromises = defaultWatchlist?.items?.map(async (item) => {
         try {
           const freshData = await getStockData(item.symbol)
           if (freshData && freshData.price > 0) {
-            updateWatchlistItem(defaultWatchlist.id, item.id, {
+            updateWatchlistItem(defaultWatchlist?.id || 'default', item.id, {
               price: freshData.price,
               change: freshData.change,
               changePercent: freshData.changePercent,
@@ -410,7 +433,7 @@ export default function WatchlistPage() {
 
 
   // Calculate totals with real-time data
-  const totalItems = filteredItems.length
+  const totalItems = filteredItems?.length || 0
   const averagePrice = totalItems > 0 ? filteredItems.reduce((sum, item) => sum + (item.price || 0), 0) / totalItems : 0
   const totalChange = filteredItems.reduce((sum, item) => sum + (item.change || 0), 0)
   const totalChangePercent = totalItems > 0 ? (totalChange / filteredItems.reduce((sum, item) => sum + ((item.price || 0) - (item.change || 0)), 0)) * 100 : 0
@@ -418,6 +441,18 @@ export default function WatchlistPage() {
   const losers = filteredItems.filter(item => (item.changePercent || 0) < 0).length
 
 
+
+  // Show loading state while store is initializing
+  if (storeLoading || !isHydrated) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading watchlist...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -460,7 +495,7 @@ export default function WatchlistPage() {
           <PolygonConnectionStatus showDetails={true} className="text-xs" />
           <Button 
             onClick={refreshWatchlistData}
-            disabled={isLoading || defaultWatchlist.items.length === 0}
+            disabled={isLoading || !defaultWatchlist?.items?.length}
             variant="outline"
             size="sm"
             className="flex items-center space-x-2"
@@ -471,6 +506,30 @@ export default function WatchlistPage() {
               <RefreshCw className="w-4 h-4" />
             )}
             <span>Refresh</span>
+          </Button>
+          <Button 
+            onClick={async () => {
+              try {
+                console.log('🔍 Testing API endpoints...')
+                const response = await fetch('/api/test-db')
+                const data = await response.json()
+                console.log('📊 Database test result:', data)
+                
+                const debugResponse = await fetch('/api/debug-watchlist')
+                const debugData = await debugResponse.json()
+                console.log('📊 Debug watchlist result:', debugData)
+                
+                alert(`Database: ${data.success ? 'OK' : 'Failed'}\nWatchlist: ${debugData.totalWatchlists} watchlists`)
+              } catch (error) {
+                console.error('❌ Debug test failed:', error)
+                alert('Debug test failed: ' + error)
+              }
+            }}
+            variant="outline"
+            size="sm"
+            className="flex items-center space-x-2"
+          >
+            <span>Debug</span>
           </Button>
           <Button 
             onClick={() => {
@@ -529,102 +588,109 @@ export default function WatchlistPage() {
         </div>
 
         {/* Search Results */}
-        {(searchQuery.length > 0 || isAddingSymbol) && searchQuery.length > 0 && (
+        {(searchQuery.length > 0 || isAddingSymbol) && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center justify-between">
-                Search Results for "{searchQuery}"
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-muted-foreground font-normal">
-                    {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
-                  </span>
-                  {isSearching && <Loader2 className="w-4 h-4 animate-spin" />}
-                </div>
+                {searchQuery.length > 0 ? (
+                  <>
+                    Search Results for "{searchQuery}"
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-muted-foreground font-normal">
+                        {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+                      </span>
+                      {isSearching && <Loader2 className="w-4 h-4 animate-spin" />}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    Popular Stocks
+                    <span className="text-sm text-muted-foreground font-normal">
+                      Click to search
+                    </span>
+                  </>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {searchResults.length > 0 ? (
-                <div className="space-y-3">
-                  {searchResults.map((stock) => (
-                    <div key={stock.symbol} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                            <span className="text-white font-bold text-sm">{stock.symbol[0]}</span>
-                          </div>
-                          <div>
-                            <div className="font-semibold">{stock.symbol}</div>
-                            <div className="text-sm text-muted-foreground">{stock.name}</div>
-                            <div className="text-xs text-muted-foreground">{stock.exchange}</div>
+              {searchQuery.length > 0 ? (
+                // Show search results
+                searchResults.length > 0 ? (
+                  <div className="space-y-3">
+                    {searchResults.map((stock) => (
+                      <div key={stock.symbol} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                              <span className="text-white font-bold text-sm">{stock.symbol[0]}</span>
+                            </div>
+                            <div>
+                              <div className="font-semibold">{stock.symbol}</div>
+                              <div className="text-sm text-muted-foreground">{stock.name}</div>
+                              <div className="text-xs text-muted-foreground">{stock.exchange}</div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="text-right mr-4">
-                        <div className="font-semibold">${stock.price.toFixed(2)}</div>
-                        <div className={`text-sm ${stock.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {stock.changePercent >= 0 ? '+' : ''}{stock.change.toFixed(2)} ({stock.changePercent.toFixed(2)}%)
+                        <div className="text-right mr-4">
+                          <div className="font-semibold">${stock.price.toFixed(2)}</div>
+                          <div className={`text-sm ${stock.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {stock.changePercent >= 0 ? '+' : ''}{stock.change.toFixed(2)} ({stock.changePercent.toFixed(2)}%)
+                          </div>
                         </div>
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              setLoadingStocks(prev => new Set(prev).add(stock.symbol))
+                              await handleAddToWatchlist(stock)
+                            } finally {
+                              setLoadingStocks(prev => {
+                                const newSet = new Set(prev)
+                                newSet.delete(stock.symbol)
+                                return newSet
+                              })
+                            }
+                          }}
+                                                  disabled={defaultWatchlist?.items?.some(item => item.symbol === stock.symbol) || loadingStocks.has(stock.symbol)}
+                        variant={defaultWatchlist?.items?.some(item => item.symbol === stock.symbol) ? "outline" : "default"}
+                        >
+                          {loadingStocks.has(stock.symbol) ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              Adding...
+                            </>
+                          ) : defaultWatchlist?.items?.some(item => item.symbol === stock.symbol) ? (
+                            <>
+                              <Check className="w-4 h-4 mr-1" />
+                              Added
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-4 h-4 mr-1" />
+                              Add
+                            </>
+                          )}
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            setLoadingStocks(prev => new Set(prev).add(stock.symbol))
-                            await handleAddToWatchlist(stock)
-                          } finally {
-                            setLoadingStocks(prev => {
-                              const newSet = new Set(prev)
-                              newSet.delete(stock.symbol)
-                              return newSet
-                            })
-                          }
-                        }}
-                        disabled={defaultWatchlist.items.some(item => item.symbol === stock.symbol) || loadingStocks.has(stock.symbol)}
-                        variant={defaultWatchlist.items.some(item => item.symbol === stock.symbol) ? "outline" : "default"}
-                      >
-                        {loadingStocks.has(stock.symbol) ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                            Adding...
-                          </>
-                        ) : defaultWatchlist.items.some(item => item.symbol === stock.symbol) ? (
-                          <>
-                            <Check className="w-4 h-4 mr-1" />
-                            Added
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="w-4 h-4 mr-1" />
-                            Add
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : !isSearching ? (
-                <div className="text-center py-8">
-                  <div className="mb-4">
-                    <div className="w-16 h-16 mx-auto bg-muted rounded-full flex items-center justify-center">
-                      <Search className="w-8 h-8 text-muted-foreground" />
-                    </div>
+                    ))}
                   </div>
-                  {error ? (
-                    <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                      <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+                ) : !isSearching ? (
+                  <div className="text-center py-8">
+                    <div className="mb-4">
+                      <div className="w-16 h-16 mx-auto bg-muted rounded-full flex items-center justify-center">
+                        <Search className="w-8 h-8 text-muted-foreground" />
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-muted-foreground font-medium">No stocks found for "{searchQuery}"</p>
-                  )}
-                  <p className="text-sm text-muted-foreground mt-2">Try these popular stocks:</p>
-                  <div className="mt-3 flex flex-wrap gap-2 justify-center">
-                    {isLoadingPopular ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading popular stocks...
+                    {error ? (
+                      <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
                       </div>
                     ) : (
-                      ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'PFE', 'FORD', 'IBM', 'GE', 'ZOOM'].map((symbol) => (
+                      <p className="text-muted-foreground font-medium">No stocks found for "{searchQuery}"</p>
+                    )}
+                    <p className="text-sm text-muted-foreground mt-2">Try these popular stocks:</p>
+                    <div className="mt-3 flex flex-wrap gap-2 justify-center">
+                      {['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'AMZN', 'META', 'NFLX'].map((symbol) => (
                         <Button
                           key={symbol}
                           variant="outline"
@@ -634,40 +700,51 @@ export default function WatchlistPage() {
                         >
                           {symbol}
                         </Button>
-                      ))
-                    )}
+                      ))}
+                    </div>
                   </div>
-                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      💡 <strong>Universal Search:</strong> Search by symbol (AAPL) or company name (Apple)
-                    </p>
+                ) : (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    <p className="text-muted-foreground">Searching...</p>
                   </div>
-                </div>
+                )
               ) : (
-                <div className="text-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                  <p className="text-muted-foreground">Searching...</p>
+                // Show popular stocks when no search query
+                <div className="space-y-3">
+                  {[
+                    { symbol: 'AAPL', name: 'Apple Inc.' },
+                    { symbol: 'MSFT', name: 'Microsoft Corporation' },
+                    { symbol: 'GOOGL', name: 'Alphabet Inc.' },
+                    { symbol: 'TSLA', name: 'Tesla, Inc.' },
+                    { symbol: 'NVDA', name: 'NVIDIA Corporation' },
+                    { symbol: 'AMZN', name: 'Amazon.com, Inc.' },
+                    { symbol: 'META', name: 'Meta Platforms, Inc.' },
+                    { symbol: 'NFLX', name: 'Netflix, Inc.' }
+                  ].map((stock) => (
+                    <div key={stock.symbol} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">{stock.symbol[0]}</span>
+                          </div>
+                          <div>
+                            <div className="font-semibold">{stock.symbol}</div>
+                            <div className="text-sm text-muted-foreground">{stock.name}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSearchQuery(stock.symbol)}
+                      >
+                        Search
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Add Stock Helper */}
-        {isAddingSymbol && searchQuery.length === 0 && (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <Search className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">Search for Stocks</h3>
-              <p className="text-muted-foreground mb-4">
-                Start typing to search for stocks by symbol, company name, or sector
-              </p>
-              <div className="text-sm text-muted-foreground space-y-2">
-                <div>Popular searches: <strong>AAPL</strong>, <strong>Tesla</strong>, <strong>Microsoft</strong>, <strong>IBM</strong></div>
-                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded text-green-700 dark:text-green-300 text-xs">
-                  🚀 <strong>NEW:</strong> Search ANY stock - now powered by multi-source API!
-                </div>
-              </div>
             </CardContent>
           </Card>
         )}

@@ -11,7 +11,15 @@ import {
   RealTimeData,
   Crypto,
   Forex,
-  Commodity
+  Commodity,
+  PriceAlert,
+  CreatePriceAlertRequest,
+  PriceAlertHistory,
+  User,
+  AuthState,
+  LoginCredentials,
+  RegisterCredentials,
+  AuthResponse
 } from '@/types'
 
 // UI Store
@@ -105,6 +113,7 @@ interface WatchlistStore {
   activeWatchlist: string | null
   isLoading: boolean
   isConnectedToRealTime: boolean
+  isHydrated: boolean
   createWatchlist: (name: string) => Promise<void>
   addWatchlist: (watchlist: Watchlist) => void
   removeWatchlist: (id: string) => Promise<void>
@@ -117,6 +126,7 @@ interface WatchlistStore {
   startRealTimeUpdates: () => void
   stopRealTimeUpdates: () => void
   updatePriceFromWebSocket: (symbol: string, price: number, change: number, changePercent: number) => void
+  setHydrated: (hydrated: boolean) => void
 }
 
 export const useWatchlistStore = create<WatchlistStore>()(
@@ -126,20 +136,36 @@ export const useWatchlistStore = create<WatchlistStore>()(
       activeWatchlist: null,
       isLoading: false,
       isConnectedToRealTime: false,
+      isHydrated: false,
       
       loadWatchlists: async () => {
         set({ isLoading: true })
         try {
           const response = await fetch('/api/watchlist')
+          console.log('📡 Watchlist API response status:', response.status)
+          
           if (response.ok) {
-            const { data } = await response.json()
-            set({ watchlists: data, isLoading: false })
+            const responseData = await response.json()
+            console.log('📊 Watchlist API response data:', responseData)
+            
+            if (responseData.success && responseData.data) {
+              set({ watchlists: responseData.data, isLoading: false })
+              console.log('✅ Successfully loaded watchlists:', responseData.data)
+            } else {
+              console.error('❌ Invalid response format:', responseData)
+              set({ isLoading: false })
+            }
           } else {
-            console.error('Failed to load watchlists')
+            const errorData = await response.json().catch(() => ({}))
+            console.error('❌ Failed to load watchlists:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorData
+            })
             set({ isLoading: false })
           }
         } catch (error) {
-          console.error('Error loading watchlists:', error)
+          console.error('❌ Error loading watchlists:', error)
           set({ isLoading: false })
         }
       },
@@ -201,6 +227,9 @@ export const useWatchlistStore = create<WatchlistStore>()(
       addToWatchlist: async (watchlistId: string, item: WatchlistItem) => {
         set({ isLoading: true })
         try {
+          console.log(`🔍 Store: Adding ${item.symbol} to watchlist ${watchlistId}...`)
+          console.log(`📊 Item data:`, item)
+          
           const response = await fetch(`/api/watchlist/${watchlistId}/items`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -219,8 +248,12 @@ export const useWatchlistStore = create<WatchlistStore>()(
             })
           })
           
+          console.log(`📡 API Response status:`, response.status)
+          
           if (response.ok) {
             const { data } = await response.json()
+            console.log(`✅ API Response data:`, data)
+            
             const newItem = { ...item, id: data.id, lastUpdated: new Date(data.lastUpdated) }
             
             set((state) => ({
@@ -235,13 +268,30 @@ export const useWatchlistStore = create<WatchlistStore>()(
               ),
               isLoading: false
             }))
+            
+            console.log(`✅ Successfully added ${item.symbol} to watchlist in store`)
           } else {
-            console.error('Failed to add item to watchlist')
-            set({ isLoading: false })
+            const errorData = await response.json().catch(() => ({}))
+            console.error('❌ Failed to add item to watchlist:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorData
+            })
+            
+            // Throw error with details for better error handling
+            const errorMessage = errorData.message || errorData.error || response.statusText || 'Unknown error'
+            console.error('❌ API Error details:', {
+              status: response.status,
+              message: errorMessage,
+              fullError: errorData
+            })
+            throw new Error(`API Error ${response.status}: ${errorMessage}`)
           }
         } catch (error) {
-          console.error('Error adding item to watchlist:', error)
+          console.error('❌ Error adding item to watchlist:', error)
           set({ isLoading: false })
+          // Re-throw the error so the component can handle it
+          throw error
         }
       },
       
@@ -387,7 +437,9 @@ export const useWatchlistStore = create<WatchlistStore>()(
             )
           }))
         }))
-      }
+      },
+      
+      setHydrated: (hydrated: boolean) => set({ isHydrated: hydrated })
     }),
     {
       name: 'watchlist-store'
@@ -570,6 +622,536 @@ export const useMarketDataStore = create<MarketDataStore>()(
     }),
     {
       name: 'market-data-store'
+    }
+  )
+)
+
+// News Store
+interface NewsStore {
+  news: any[]
+  marketUpdates: any[]
+  unreadCount: number
+  isLoading: boolean
+  lastFetch: Date | null
+  fetchNews: () => Promise<void>
+  markAsRead: () => void
+  incrementUnreadCount: () => void
+}
+
+export const useNewsStore = create<NewsStore>()(
+  persist(
+    (set, get) => ({
+      news: [],
+      marketUpdates: [],
+      unreadCount: 0,
+      isLoading: false,
+      lastFetch: null,
+      
+      fetchNews: async () => {
+        set({ isLoading: true })
+        try {
+          const [newsResponse, updatesResponse] = await Promise.all([
+            fetch('/api/news?limit=15'),
+            fetch('/api/news?type=market-updates&limit=5')
+          ])
+          
+          const newsData = await newsResponse.json()
+          const updatesData = await updatesResponse.json()
+          
+          if (newsData.success && updatesData.success) {
+            set({ 
+              news: newsData.data, 
+              marketUpdates: updatesData.data,
+              lastFetch: new Date(),
+              unreadCount: Math.min(get().unreadCount + 5, 99) // Increment unread count for real news
+            })
+            console.log(`✅ News store updated: ${newsData.data.length} articles, ${updatesData.data.length} updates`)
+          } else {
+            console.warn('⚠️ News API returned partial data:', { newsData, updatesData })
+            // Still update with available data
+            if (newsData.success) {
+              set({ 
+                news: newsData.data, 
+                lastFetch: new Date(),
+                unreadCount: Math.min(get().unreadCount + 3, 99)
+              })
+            }
+            if (updatesData.success) {
+              set({ 
+                marketUpdates: updatesData.data,
+                lastFetch: new Date()
+              })
+            }
+          }
+        } catch (error) {
+          console.error('❌ Error fetching news:', error)
+          // Don't throw error, just log it and keep existing data
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+      
+      markAsRead: () => set({ unreadCount: 0 }),
+      
+      incrementUnreadCount: () => set((state) => ({ 
+        unreadCount: Math.min(state.unreadCount + 1, 99) 
+      }))
+    }),
+    {
+      name: 'news-store'
+    }
+  )
+)
+
+// Price Alert Store
+interface PriceAlertStore {
+  alerts: PriceAlert[]
+  currentPrices: Record<string, {
+    currentPrice: number | null
+    priceChange: number | null
+    priceChangePercent: number | null
+    name: string | null
+    lastUpdated: string | null
+  }>
+  schedulerStatus: {
+    isActive: boolean
+    intervalSeconds: number
+    nextCheckTime: string | null
+  }
+  isLoading: boolean
+  error: string | null
+  createAlert: (alert: CreatePriceAlertRequest) => Promise<void>
+  updateAlert: (id: string, updates: Partial<PriceAlert>) => Promise<void>
+  deleteAlert: (id: string) => Promise<void>
+  cancelAlert: (id: string) => Promise<void>
+  loadAlerts: () => Promise<void>
+  loadCurrentPrices: () => Promise<void>
+  loadSchedulerStatus: () => Promise<void>
+  startScheduler: () => Promise<void>
+  stopScheduler: () => Promise<void>
+  refreshAlerts: () => Promise<void>
+  getActiveAlerts: () => PriceAlert[]
+  getAlertHistory: (alertId: string) => Promise<PriceAlertHistory[]>
+}
+
+export const usePriceAlertStore = create<PriceAlertStore>()(
+  persist(
+    (set, get) => ({
+      alerts: [],
+      currentPrices: {},
+      schedulerStatus: {
+        isActive: false,
+        intervalSeconds: 60,
+        nextCheckTime: null
+      },
+      isLoading: false,
+      error: null,
+      
+      createAlert: async (alertData: CreatePriceAlertRequest) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch('/api/price-alerts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(alertData)
+          })
+          
+          if (response.ok) {
+            const { data } = await response.json()
+            set((state) => ({
+              alerts: [...state.alerts, data],
+              isLoading: false
+            }))
+          } else {
+            const errorData = await response.json()
+            set({ 
+              error: errorData.message || 'Failed to create alert',
+              isLoading: false 
+            })
+            throw new Error(errorData.message || 'Failed to create alert')
+          }
+        } catch (error) {
+          console.error('Error creating price alert:', error)
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to create alert',
+            isLoading: false 
+          })
+          throw error
+        }
+      },
+      
+      updateAlert: async (id: string, updates: Partial<PriceAlert>) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch(`/api/price-alerts/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+          })
+          
+          if (response.ok) {
+            const { data } = await response.json()
+            set((state) => ({
+              alerts: state.alerts.map(alert => 
+                alert.id === id ? { ...alert, ...data } : alert
+              ),
+              isLoading: false
+            }))
+          } else {
+            const errorData = await response.json()
+            set({ 
+              error: errorData.message || 'Failed to update alert',
+              isLoading: false 
+            })
+            throw new Error(errorData.message || 'Failed to update alert')
+          }
+        } catch (error) {
+          console.error('Error updating price alert:', error)
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to update alert',
+            isLoading: false 
+          })
+          throw error
+        }
+      },
+      
+      deleteAlert: async (id: string) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch(`/api/price-alerts/${id}`, {
+            method: 'DELETE'
+          })
+          
+          if (response.ok) {
+            set((state) => ({
+              alerts: state.alerts.filter(alert => alert.id !== id),
+              isLoading: false
+            }))
+          } else {
+            const errorData = await response.json()
+            set({ 
+              error: errorData.message || 'Failed to delete alert',
+              isLoading: false 
+            })
+            throw new Error(errorData.message || 'Failed to delete alert')
+          }
+        } catch (error) {
+          console.error('Error deleting price alert:', error)
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to delete alert',
+            isLoading: false 
+          })
+          throw error
+        }
+      },
+      
+      cancelAlert: async (id: string) => {
+        await get().updateAlert(id, { status: 'cancelled', isActive: false })
+      },
+      
+      loadAlerts: async () => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch('/api/price-alerts')
+          
+          if (response.ok) {
+            const { data } = await response.json()
+            set({ alerts: data, isLoading: false })
+            // Load current prices after loading alerts
+            await get().loadCurrentPrices()
+          } else {
+            const errorData = await response.json()
+            set({ 
+              error: errorData.message || 'Failed to load alerts',
+              isLoading: false 
+            })
+          }
+        } catch (error) {
+          console.error('Error loading price alerts:', error)
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to load alerts',
+            isLoading: false 
+          })
+        }
+      },
+
+      loadCurrentPrices: async () => {
+        try {
+          const response = await fetch('/api/price-alerts/prices')
+          
+          if (response.ok) {
+            const { data } = await response.json()
+            const pricesMap: Record<string, any> = {}
+            data.forEach((item: any) => {
+              pricesMap[item.symbol] = {
+                currentPrice: item.currentPrice,
+                priceChange: item.priceChange,
+                priceChangePercent: item.priceChangePercent,
+                name: item.name,
+                lastUpdated: item.lastUpdated
+              }
+            })
+            set({ currentPrices: pricesMap })
+          }
+        } catch (error) {
+          console.error('Failed to load current prices:', error)
+        }
+      },
+
+      loadSchedulerStatus: async () => {
+        try {
+          const response = await fetch('/api/price-alerts/scheduler')
+          
+          if (response.ok) {
+            const { data } = await response.json()
+            set({ schedulerStatus: data })
+          }
+        } catch (error) {
+          console.error('Failed to load scheduler status:', error)
+        }
+      },
+
+      startScheduler: async () => {
+        try {
+          const response = await fetch('/api/price-alerts/scheduler', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'start' })
+          })
+          
+          if (response.ok) {
+            const { data } = await response.json()
+            set({ schedulerStatus: data })
+          } else {
+            const errorData = await response.json()
+            throw new Error(errorData.message || 'Failed to start scheduler')
+          }
+        } catch (error) {
+          console.error('Error starting scheduler:', error)
+          throw error
+        }
+      },
+
+      stopScheduler: async () => {
+        try {
+          const response = await fetch('/api/price-alerts/scheduler', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'stop' })
+          })
+          
+          if (response.ok) {
+            const { data } = await response.json()
+            set({ schedulerStatus: data })
+          } else {
+            const errorData = await response.json()
+            throw new Error(errorData.message || 'Failed to stop scheduler')
+          }
+        } catch (error) {
+          console.error('Error stopping scheduler:', error)
+          throw error
+        }
+      },
+      
+      refreshAlerts: async () => {
+        await get().loadAlerts()
+      },
+      
+      getActiveAlerts: () => {
+        return get().alerts.filter(alert => alert.status === 'active' && alert.isActive)
+      },
+      
+      getAlertHistory: async (alertId: string) => {
+        try {
+          const response = await fetch(`/api/price-alerts/${alertId}/history`)
+          
+          if (response.ok) {
+            const { data } = await response.json()
+            return data
+          } else {
+            console.error('Failed to load alert history')
+            return []
+          }
+        } catch (error) {
+          console.error('Error loading alert history:', error)
+          return []
+        }
+      }
+    }),
+    {
+      name: 'price-alert-store'
+    }
+  )
+)
+
+// Authentication Store
+interface AuthStore extends AuthState {
+  login: (credentials: LoginCredentials) => Promise<void>
+  register: (credentials: RegisterCredentials) => Promise<void>
+  logout: () => void
+  clearError: () => void
+  updateUser: (updates: Partial<User>) => void
+  refreshToken: () => Promise<void>
+  checkAuth: () => Promise<void>
+}
+
+export const useAuthStore = create<AuthStore>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: null,
+      token: null,
+      
+      login: async (credentials: LoginCredentials) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(credentials)
+          })
+          
+          if (response.ok) {
+            const data: AuthResponse = await response.json()
+            set({
+              user: data.user,
+              token: data.token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null
+            })
+          } else {
+            const errorData = await response.json()
+            set({
+              error: errorData.message || 'Login failed',
+              isLoading: false
+            })
+            throw new Error(errorData.message || 'Login failed')
+          }
+        } catch (error) {
+          console.error('Login error:', error)
+          set({
+            error: error instanceof Error ? error.message : 'Login failed',
+            isLoading: false
+          })
+          throw error
+        }
+      },
+      
+      register: async (credentials: RegisterCredentials) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(credentials)
+          })
+          
+          if (response.ok) {
+            const data: AuthResponse = await response.json()
+            set({
+              user: data.user,
+              token: data.token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null
+            })
+          } else {
+            const errorData = await response.json()
+            set({
+              error: errorData.message || 'Registration failed',
+              isLoading: false
+            })
+            throw new Error(errorData.message || 'Registration failed')
+          }
+        } catch (error) {
+          console.error('Registration error:', error)
+          set({
+            error: error instanceof Error ? error.message : 'Registration failed',
+            isLoading: false
+          })
+          throw error
+        }
+      },
+      
+      logout: () => {
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          error: null
+        })
+      },
+      
+      clearError: () => set({ error: null }),
+      
+      updateUser: (updates: Partial<User>) => set((state) => ({
+        user: state.user ? { ...state.user, ...updates } : null
+      })),
+      
+      refreshToken: async () => {
+        const { token } = get()
+        if (!token) return
+        
+        try {
+          const response = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          })
+          
+          if (response.ok) {
+            const data: AuthResponse = await response.json()
+            set({
+              user: data.user,
+              token: data.token,
+              isAuthenticated: true
+            })
+          } else {
+            // Token is invalid, logout user
+            get().logout()
+          }
+        } catch (error) {
+          console.error('Token refresh error:', error)
+          get().logout()
+        }
+      },
+      
+      checkAuth: async () => {
+        const { token } = get()
+        if (!token) return
+        
+        try {
+          const response = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            set({
+              user: data.user,
+              isAuthenticated: true
+            })
+          } else {
+            get().logout()
+          }
+        } catch (error) {
+          console.error('Auth check error:', error)
+          get().logout()
+        }
+      }
+    }),
+    {
+      name: 'auth-store',
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated
+      })
     }
   )
 )

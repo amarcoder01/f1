@@ -14,10 +14,12 @@ import {
   BarChart3,
   Play,
   Wrench,
-  TrendingUp
+  TrendingUp,
+  Newspaper,
+  Bell
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useUIStore } from '@/store'
+import { useUIStore, useNewsStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -30,66 +32,84 @@ interface SidebarItem {
   description?: string
 }
 
-const sidebarItems: SidebarItem[] = [
-  {
-    id: 'dashboard',
-    label: 'Dashboard',
-    icon: Home,
-    href: '/',
-    description: 'Overview of your trading activity'
-  },
-  {
-    id: 'market',
-    label: 'Market Explorer',
-    icon: BarChart3,
-    href: '/market',
-    description: 'Search stocks and analyze markets'
-  },
-  {
-    id: 'watchlist',
-    label: 'Watchlist',
-    icon: Eye,
-    href: '/watchlist',
-    description: 'Track your favorite assets'
-  },
-  {
-    id: 'paper-trading',
-    label: 'Paper Trading',
-    icon: Play,
-    href: '/paper-trading',
-    description: 'Practice trading with virtual money',
-    badge: 'NEW'
-  },
-  {
-    id: 'treadgpt',
-    label: 'TreadGPT Chat',
-    icon: Bot,
-    href: '/treadgpt',
-    description: 'AI-powered trading assistant',
-    badge: 'AI'
-  },
-  {
-    id: 'tools',
-    label: 'Tools',
-    icon: Wrench,
-    href: '/tools',
-    description: 'Professional backtesting and strategy analysis',
-    badge: 'BACKTEST'
-  },
-  {
-    id: 'advanced-charts',
-    label: 'Advanced Charts',
-    icon: TrendingUp,
-    href: '/advanced-charts',
-    description: 'Professional charting with 50+ indicators',
-    badge: 'PRO'
-  }
-]
+
 
 export function Sidebar() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
+  const { unreadCount } = useNewsStore()
   const router = useRouter()
   const pathname = usePathname()
+
+  const sidebarItems: SidebarItem[] = [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: Home,
+      href: '/',
+      description: 'Overview of your trading activity'
+    },
+    {
+      id: 'market',
+      label: 'Market Explorer',
+      icon: BarChart3,
+      href: '/market',
+      description: 'Search stocks and analyze markets'
+    },
+    {
+      id: 'watchlist',
+      label: 'Watchlist',
+      icon: Eye,
+      href: '/watchlist',
+      description: 'Track your favorite assets'
+    },
+    {
+      id: 'news',
+      label: 'Market News',
+      icon: Newspaper,
+      href: '/news',
+      description: 'Real-time news and market insights',
+      badge: unreadCount > 0 ? `${unreadCount}` : 'LIVE'
+    },
+    {
+      id: 'price-alerts',
+      label: 'Price Alerts',
+      icon: Bell,
+      href: '/price-alerts',
+      description: 'Set up price alerts and notifications'
+    },
+    {
+      id: 'paper-trading',
+      label: 'Paper Trading',
+      icon: Play,
+      href: '/paper-trading',
+      description: 'Practice trading with virtual money',
+      badge: 'NEW'
+    },
+    {
+      id: 'treadgpt',
+      label: 'TreadGPT Chat',
+      icon: Bot,
+      href: '/treadgpt',
+      description: 'AI-powered trading assistant',
+      badge: 'AI'
+    },
+    {
+      id: 'tools',
+      label: 'Tools',
+      icon: Wrench,
+      href: '/tools',
+      description: 'Professional backtesting and strategy analysis',
+      badge: 'BACKTEST'
+    },
+    {
+      id: 'advanced-charts',
+      label: 'Advanced Charts',
+      icon: TrendingUp,
+      href: '/advanced-charts',
+      description: 'Professional charting with 50+ indicators',
+      badge: 'PRO'
+    }
+  ]
 
   const handleItemClick = (href: string) => {
     router.push(href)

@@ -16,6 +16,7 @@ model User {
   watchlists    Watchlist[]
   chatSessions  ChatSession[]
   paperTradingAccounts PaperTradingAccount[]
+  priceAlerts   PriceAlert[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -170,4 +171,34 @@ model PaperTransaction {
   timestamp   DateTime  @default(now())
 
   account     PaperTradingAccount @relation(fields: [accountId], references: [id])
+}
+
+// Price Alert Models
+model PriceAlert {
+  id          String    @id @default(cuid())
+  userId      String
+  symbol      String
+  targetPrice Float
+  condition   String    // 'above' or 'below'
+  userEmail   String    @default("demo@vidality.com")
+  status      String    @default("active") // 'active', 'triggered', 'cancelled'
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  triggeredAt DateTime?
+  lastChecked DateTime?
+
+  user        User      @relation(fields: [userId], references: [id])
+  history     PriceAlertHistory[]
+}
+
+model PriceAlertHistory {
+  id          String    @id @default(cuid())
+  alertId     String
+  action      String    // 'created', 'triggered', 'cancelled', 'checked'
+  price       Float?
+  message     String?
+  timestamp   DateTime  @default(now())
+
+  alert       PriceAlert @relation(fields: [alertId], references: [id])
 }

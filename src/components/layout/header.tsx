@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils'
 import { useUIStore, useSettingsStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { AuthProvider } from '@/components/auth/AuthProvider'
 
 export function Header() {
   const { theme, setTheme, notifications } = useUIStore()
@@ -123,19 +124,9 @@ export function Header() {
           <Settings className="w-5 h-5" />
         </Button>
 
-        {/* User Menu */}
+        {/* Authentication */}
         <div className="flex items-center space-x-3 pl-3 border-l border-border">
-          <div className="flex flex-col items-end">
-            <span className="text-sm font-medium">Demo User</span>
-            <span className="text-xs text-muted-foreground">Trading Account</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-8 h-8 rounded-full bg-primary/10 hover:bg-primary/20"
-          >
-            <User className="w-4 h-4" />
-          </Button>
+          <AuthProvider />
         </div>
       </div>
     </motion.header>

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { MainLayout } from '@/components/layout/main-layout'
+import '@/lib/startup' // Initialize price alert scheduler
 
 const inter = Inter({ subsets: ['latin'] })
 

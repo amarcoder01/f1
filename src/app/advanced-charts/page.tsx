@@ -340,9 +340,23 @@ export default function AdvancedChartsPage() {
   // Fetch chart data and update price information
   const fetchChartData = async () => {
     try {
+      console.log('📊 Advanced Charts: Fetching chart data...', { 
+        symbol: chartSettings.symbol, 
+        timeframe: chartSettings.timeframe 
+      })
+      
       const response = await fetch(`/api/chart/${chartSettings.symbol}?range=${chartSettings.timeframe}&interval=1m`)
+      
+      console.log('📊 Advanced Charts: API response status:', response.status)
+      
       if (response.ok) {
         const result = await response.json()
+        console.log('📊 Advanced Charts: API response data:', { 
+          success: result.success, 
+          dataLength: result.data?.length,
+          source: result.source 
+        })
+        
         if (result.success && result.data) {
           setChartData(result.data)
           
@@ -355,11 +369,20 @@ export default function AdvancedChartsPage() {
             if (previous) {
               setPriceChange(((latest.close - previous.close) / previous.close) * 100)
             }
+            
+            console.log('📊 Advanced Charts: Updated price info:', { 
+              currentPrice: latest.close, 
+              priceChange: previous ? ((latest.close - previous.close) / previous.close) * 100 : 0 
+            })
           }
+        } else {
+          console.warn('📊 Advanced Charts: No data in response')
         }
+      } else {
+        console.error('📊 Advanced Charts: API request failed:', response.status, response.statusText)
       }
     } catch (error) {
-      console.error('Error fetching chart data:', error)
+      console.error('📊 Advanced Charts: Error fetching chart data:', error)
     }
   }
 
@@ -367,6 +390,15 @@ export default function AdvancedChartsPage() {
   useEffect(() => {
     fetchChartData()
   }, [chartSettings.symbol, chartSettings.timeframe])
+
+  // Monitor chart data changes
+  useEffect(() => {
+    console.log('📊 Advanced Charts: Chart data updated:', { 
+      dataLength: chartData.length,
+      symbol: chartSettings.symbol,
+      timeframe: chartSettings.timeframe 
+    })
+  }, [chartData, chartSettings.symbol, chartSettings.timeframe])
 
   const handleRefreshChart = () => {
     setChartKey(prev => prev + 1)

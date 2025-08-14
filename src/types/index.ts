@@ -23,6 +23,54 @@ export interface Stock {
   lastUpdated: string
 }
 
+// Authentication Types
+export interface User {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  avatar?: string
+  isEmailVerified: boolean
+  createdAt: string
+  updatedAt: string
+  lastLoginAt?: string
+  preferences: {
+    theme: 'light' | 'dark' | 'system'
+    currency: string
+    timezone: string
+    notifications: {
+      email: boolean
+      push: boolean
+      sms: boolean
+    }
+  }
+}
+
+export interface AuthState {
+  user: User | null
+  isAuthenticated: boolean
+  isLoading: boolean
+  error: string | null
+  token: string | null
+}
+
+export interface LoginCredentials {
+  email: string
+  password: string
+}
+
+export interface RegisterCredentials {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+}
+
+export interface AuthResponse {
+  user: User
+  token: string
+}
+
 // Trading Data Types - Forex
 export interface Forex {
   symbol: string
@@ -163,13 +211,48 @@ export interface Order {
 export interface NewsItem {
   id: string
   title: string
-  summary: string
+  description: string
   content: string
   url: string
+  imageUrl?: string
   source: string
   publishedAt: Date
-  symbols: string[]
-  sentiment: 'positive' | 'negative' | 'neutral'
+  sentiment?: SentimentScore
+  relevance: number
+  category: string
+}
+
+export interface SentimentScore {
+  score: number // -1 to 1 (negative to positive)
+  label: 'positive' | 'negative' | 'neutral'
+  confidence: number // 0 to 1
+}
+
+export interface EarningsEvent {
+  id: string
+  symbol: string
+  companyName: string
+  reportDate: Date
+  estimate: number
+  actual: number | null
+  prediction: number
+  sentiment: SentimentScore
+}
+
+export interface SocialMediaSentiment {
+  platform: 'twitter' | 'reddit' | 'stocktwits'
+  symbol: string
+  sentiment: SentimentScore
+  volume: number
+  trending: boolean
+  topMentions: string[]
+}
+
+export interface NewsFilter {
+  category?: string
+  sentiment?: 'positive' | 'negative' | 'neutral'
+  timeRange?: '1h' | '24h' | '7d' | '30d'
+  relevance?: number
 }
 
 // Chat Types
@@ -438,4 +521,48 @@ export interface PaperTradingPerformance {
   volatility: number
   beta: number
   alpha: number
+}
+
+// Price Alert Types
+export interface PriceAlert {
+  id: string
+  userId: string
+  symbol: string
+  targetPrice: number
+  condition: 'above' | 'below'
+  userEmail: string
+  status: 'active' | 'triggered' | 'cancelled'
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  triggeredAt?: Date
+  lastChecked?: Date
+  currentPrice?: number
+  assetName?: string
+}
+
+export interface PriceAlertHistory {
+  id: string
+  alertId: string
+  action: 'created' | 'triggered' | 'cancelled' | 'checked'
+  price?: number
+  message?: string
+  timestamp: Date
+}
+
+export interface CreatePriceAlertRequest {
+  symbol: string
+  targetPrice: number
+  condition: 'above' | 'below'
+  userEmail: string
+}
+
+export interface PriceAlertNotification {
+  alertId: string
+  symbol: string
+  targetPrice: number
+  currentPrice: number
+  condition: 'above' | 'below'
+  message: string
+  userEmail: string
 }

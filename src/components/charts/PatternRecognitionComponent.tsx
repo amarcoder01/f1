@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,8 @@ import {
   Activity,
   BarChart3,
   LineChart,
-  PieChart
+  PieChart,
+  RefreshCw
 } from 'lucide-react'
 
 interface OHLCVData {
@@ -69,9 +70,11 @@ export function PatternRecognitionComponent({ data, symbol, timeframe }: Pattern
   const [patterns, setPatterns] = useState<Pattern[]>([])
   const [sentiment, setSentiment] = useState<MarketSentiment | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [lastAnalysisTime, setLastAnalysisTime] = useState<number>(0)
 
-  // Candlestick patterns
-  const candlestickPatterns = [
+  // Memoized candlestick patterns to prevent recreation
+  const candlestickPatterns = useMemo(() => [
     {
       id: 'doji',
       name: 'Doji',
@@ -114,10 +117,10 @@ export function PatternRecognitionComponent({ data, symbol, timeframe }: Pattern
       type: 'bearish' as const,
       description: 'Three-candle pattern indicating potential bearish reversal'
     }
-  ]
+  ], [])
 
-  // Chart patterns
-  const chartPatterns = [
+  // Memoized chart patterns
+  const chartPatterns = useMemo(() => [
     {
       id: 'head_shoulders',
       name: 'Head and Shoulders',
@@ -166,105 +169,10 @@ export function PatternRecognitionComponent({ data, symbol, timeframe }: Pattern
       type: 'bearish' as const,
       description: 'Consolidation pattern after strong downward move'
     }
-  ]
+  ], [])
 
-  // Analyze patterns
-  const analyzePatterns = () => {
-    setIsAnalyzing(true)
-    
-    setTimeout(() => {
-      const detectedPatterns: Pattern[] = []
-      
-      // Detect candlestick patterns
-      for (let i = 2; i < data.length; i++) {
-        const current = data[i]
-        const prev = data[i - 1]
-        const prev2 = data[i - 2]
-        
-        // Doji pattern
-        if (Math.abs(current.open - current.close) / (current.high - current.low) < 0.1) {
-          detectedPatterns.push({
-            id: 'doji',
-            name: 'Doji',
-            type: 'neutral',
-            confidence: 85,
-            description: 'Open and close prices are nearly equal, indicating indecision',
-            signal: 'hold',
-            strength: 'medium',
-            location: i
-          })
-        }
-        
-        // Hammer pattern
-        const bodySize = Math.abs(current.close - current.open)
-        const lowerShadow = Math.min(current.open, current.close) - current.low
-        const upperShadow = current.high - Math.max(current.open, current.close)
-        
-        if (lowerShadow > 2 * bodySize && upperShadow < bodySize * 0.5) {
-          detectedPatterns.push({
-            id: 'hammer',
-            name: 'Hammer',
-            type: 'bullish',
-            confidence: 75,
-            description: 'Long lower shadow with small body, potential reversal signal',
-            signal: 'buy',
-            strength: 'medium',
-            location: i
-          })
-        }
-        
-        // Engulfing patterns
-        if (current.close > current.open && prev.close < prev.open && 
-            current.open < prev.close && current.close > prev.open) {
-          detectedPatterns.push({
-            id: 'engulfing_bullish',
-            name: 'Bullish Engulfing',
-            type: 'bullish',
-            confidence: 80,
-            description: 'Current candle completely engulfs previous bearish candle',
-            signal: 'buy',
-            strength: 'strong',
-            location: i
-          })
-        }
-      }
-      
-      // Detect chart patterns (simplified)
-      if (data.length > 20) {
-        const recentData = data.slice(-20)
-        const highs = recentData.map(d => d.high)
-        const lows = recentData.map(d => d.low)
-        
-        // Simple double top/bottom detection
-        const maxHigh = Math.max(...highs)
-        const maxHighCount = highs.filter(h => h >= maxHigh * 0.98).length
-        
-        if (maxHighCount >= 2) {
-          detectedPatterns.push({
-            id: 'double_top',
-            name: 'Double Top',
-            type: 'bearish',
-            confidence: 70,
-            description: 'Two peaks at similar levels, potential resistance',
-            signal: 'sell',
-            strength: 'medium',
-            location: data.length - 1
-          })
-        }
-      }
-      
-      setPatterns(detectedPatterns)
-      
-      // Calculate market sentiment
-      const sentimentScore = calculateSentiment(data)
-      setSentiment(sentimentScore)
-      
-      setIsAnalyzing(false)
-    }, 2000)
-  }
-
-  // Calculate market sentiment
-  const calculateSentiment = (data: OHLCVData[]): MarketSentiment => {
+  // Calculate market sentiment (memoized) - moved before analyzePatterns
+  const calculateSentiment = useCallback((data: OHLCVData[]): MarketSentiment => {
     if (data.length < 10) {
       return {
         overall: 'neutral',
@@ -294,8 +202,8 @@ export function PatternRecognitionComponent({ data, symbol, timeframe }: Pattern
     const momentumScore = momentum > 0 ? 70 : momentum < 0 ? 30 : 50
     
     // Trend analysis
-    const trend = recentData.slice(-5).every((d, i, arr) => i === 0 || d.close >= arr[i - 1].close) ? 80 :
-                 recentData.slice(-5).every((d, i, arr) => i === 0 || d.close <= arr[i - 1].close) ? 20 : 50
+    const trendScore = recentData.slice(-5).every((d, i, arr) => i === 0 || d.close >= arr[i - 1].close) ? 80 :
+                     recentData.slice(-5).every((d, i, arr) => i === 0 || d.close <= arr[i - 1].close) ? 20 : 50
     
     const overallScore = (technicalScore + volumeScore + momentumScore + trendScore) / 4
     const overall = overallScore > 60 ? 'bullish' : overallScore < 40 ? 'bearish' : 'neutral'
@@ -333,13 +241,214 @@ export function PatternRecognitionComponent({ data, symbol, timeframe }: Pattern
         }
       ]
     }
-  }
+  }, [])
 
+  // Memoized pattern analysis function
+  const analyzePatterns = useCallback(async () => {
+    console.log('🔍 Pattern Recognition: Starting analysis...', { 
+      dataLength: data?.length, 
+      symbol, 
+      timeframe,
+      isAnalyzing,
+      lastAnalysisTime: Date.now() - lastAnalysisTime
+    })
+
+    if (!data || data.length < 3) {
+      console.log('🔍 Pattern Recognition: Insufficient data, clearing patterns')
+      setPatterns([])
+      setSentiment(null)
+      return
+    }
+
+    // Prevent multiple simultaneous analyses
+    if (isAnalyzing) {
+      console.log('🔍 Pattern Recognition: Analysis already in progress, skipping')
+      return
+    }
+
+    // Check if we've analyzed recently (within 5 seconds)
+    const now = Date.now()
+    if (now - lastAnalysisTime < 5000) {
+      console.log('🔍 Pattern Recognition: Analysis too recent, skipping')
+      return
+    }
+
+    console.log('🔍 Pattern Recognition: Starting analysis process...')
+    setIsAnalyzing(true)
+    setError(null)
+    setLastAnalysisTime(now)
+
+    try {
+      // Use requestAnimationFrame for better performance with timeout
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            console.log('🔍 Pattern Recognition: Processing data...')
+            const detectedPatterns: Pattern[] = []
+            
+            // Detect candlestick patterns (optimized)
+            const maxCandles = Math.min(data.length, 100) // Limit to last 100 candles for performance
+            console.log(`🔍 Pattern Recognition: Analyzing ${maxCandles} candles...`)
+            
+            for (let i = 2; i < maxCandles; i++) {
+              const current = data[i]
+              const prev = data[i - 1]
+              const prev2 = data[i - 2]
+              
+              // Doji pattern
+              if (Math.abs(current.open - current.close) / (current.high - current.low) < 0.1) {
+                detectedPatterns.push({
+                  id: 'doji',
+                  name: 'Doji',
+                  type: 'neutral',
+                  confidence: 85,
+                  description: 'Open and close prices are nearly equal, indicating indecision',
+                  signal: 'hold',
+                  strength: 'medium',
+                  location: i
+                })
+              }
+              
+              // Hammer pattern
+              const bodySize = Math.abs(current.close - current.open)
+              const lowerShadow = Math.min(current.open, current.close) - current.low
+              const upperShadow = current.high - Math.max(current.open, current.close)
+              
+              if (lowerShadow > 2 * bodySize && upperShadow < bodySize * 0.5) {
+                detectedPatterns.push({
+                  id: 'hammer',
+                  name: 'Hammer',
+                  type: 'bullish',
+                  confidence: 75,
+                  description: 'Long lower shadow with small body, potential reversal signal',
+                  signal: 'buy',
+                  strength: 'medium',
+                  location: i
+                })
+              }
+              
+              // Shooting star pattern
+              if (upperShadow > 2 * bodySize && lowerShadow < bodySize * 0.5) {
+                detectedPatterns.push({
+                  id: 'shooting_star',
+                  name: 'Shooting Star',
+                  type: 'bearish',
+                  confidence: 75,
+                  description: 'Long upper shadow with small body, potential reversal signal',
+                  signal: 'sell',
+                  strength: 'medium',
+                  location: i
+                })
+              }
+              
+              // Engulfing patterns
+              if (current.close > current.open && prev.close < prev.open && 
+                  current.open < prev.close && current.close > prev.open) {
+                detectedPatterns.push({
+                  id: 'engulfing_bullish',
+                  name: 'Bullish Engulfing',
+                  type: 'bullish',
+                  confidence: 80,
+                  description: 'Current candle completely engulfs previous bearish candle',
+                  signal: 'buy',
+                  strength: 'strong',
+                  location: i
+                })
+              }
+
+              if (current.close < current.open && prev.close > prev.open && 
+                  current.open > prev.close && current.close < prev.open) {
+                detectedPatterns.push({
+                  id: 'engulfing_bearish',
+                  name: 'Bearish Engulfing',
+                  type: 'bearish',
+                  confidence: 80,
+                  description: 'Current candle completely engulfs previous bullish candle',
+                  signal: 'sell',
+                  strength: 'strong',
+                  location: i
+                })
+              }
+            }
+            
+            console.log(`🔍 Pattern Recognition: Found ${detectedPatterns.length} candlestick patterns`)
+            
+            // Detect chart patterns (simplified and optimized)
+            if (data.length > 20) {
+              const recentData = data.slice(-20)
+              const highs = recentData.map(d => d.high)
+              const lows = recentData.map(d => d.low)
+              
+              // Simple double top/bottom detection
+              const maxHigh = Math.max(...highs)
+              const maxHighCount = highs.filter(h => h >= maxHigh * 0.98).length
+              
+              if (maxHighCount >= 2) {
+                detectedPatterns.push({
+                  id: 'double_top',
+                  name: 'Double Top',
+                  type: 'bearish',
+                  confidence: 70,
+                  description: 'Two peaks at similar levels, potential resistance',
+                  signal: 'sell',
+                  strength: 'medium',
+                  location: data.length - 1
+                })
+              }
+
+              const minLow = Math.min(...lows)
+              const minLowCount = lows.filter(l => l <= minLow * 1.02).length
+              
+              if (minLowCount >= 2) {
+                detectedPatterns.push({
+                  id: 'double_bottom',
+                  name: 'Double Bottom',
+                  type: 'bullish',
+                  confidence: 70,
+                  description: 'Two troughs at similar levels, potential support',
+                  signal: 'buy',
+                  strength: 'medium',
+                  location: data.length - 1
+                })
+              }
+            }
+            
+            console.log(`🔍 Pattern Recognition: Total patterns found: ${detectedPatterns.length}`)
+            setPatterns(detectedPatterns)
+            
+            // Calculate market sentiment
+            console.log('🔍 Pattern Recognition: Calculating sentiment...')
+            const sentimentScore = calculateSentiment(data)
+            setSentiment(sentimentScore)
+            
+            console.log('🔍 Pattern Recognition: Analysis complete!')
+            resolve()
+          })
+        }),
+        new Promise<void>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Pattern analysis timeout - taking too long'))
+          }, 10000) // 10 second timeout
+        })
+      ])
+    } catch (err) {
+      console.error('🔍 Pattern Recognition: Error during analysis:', err)
+      setError(err instanceof Error ? err.message : 'Failed to analyze patterns. Please try again.')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }, [data, isAnalyzing, lastAnalysisTime])
+
+  // Debounced effect to prevent excessive analysis
   useEffect(() => {
     if (data.length > 0) {
-      analyzePatterns()
+      const timeoutId = setTimeout(() => {
+        analyzePatterns()
+      }, 500) // 500ms debounce
+
+      return () => clearTimeout(timeoutId)
     }
-  }, [data])
+  }, [data, analyzePatterns])
 
   const getSignalColor = (signal: string) => {
     switch (signal) {
@@ -358,24 +467,57 @@ export function PatternRecognitionComponent({ data, symbol, timeframe }: Pattern
     }
   }
 
+  const handleManualRefresh = () => {
+    setLastAnalysisTime(0) // Reset last analysis time to force refresh
+    analyzePatterns()
+  }
+
   return (
     <div className="space-y-6">
       {/* Pattern Recognition */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5" />
-            Pattern Recognition
-          </CardTitle>
-          <CardDescription>
-            AI-powered pattern detection and analysis
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5" />
+                Pattern Recognition
+              </CardTitle>
+              <CardDescription>
+                AI-powered pattern detection and analysis
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManualRefresh}
+              disabled={isAnalyzing}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm">{error}</span>
+              </div>
+            </div>
+          )}
+          
           {isAnalyzing ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-sm text-muted-foreground">Analyzing patterns...</p>
+              <p className="text-sm text-muted-foreground mb-2">Analyzing patterns...</p>
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+                <span>Processing {data?.length || 0} data points</span>
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+              </div>
             </div>
           ) : patterns.length > 0 ? (
             <div className="space-y-4">
@@ -419,6 +561,7 @@ export function PatternRecognitionComponent({ data, symbol, timeframe }: Pattern
             <div className="text-center py-8 text-muted-foreground">
               <Info className="h-8 w-8 mx-auto mb-2" />
               <p>No patterns detected in current timeframe</p>
+              <p className="text-xs mt-1">Try changing the timeframe or symbol</p>
             </div>
           )}
         </CardContent>

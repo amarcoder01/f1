@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { PaperTradingAccount, PaperTradingStats, Stock } from '@/types'
 import { EnhancedStockChart } from '@/components/charts/EnhancedStockChart'
+import { PortfolioPerformanceChart } from '@/components/charts/PortfolioPerformanceChart'
 
 interface TradingAnalysisProps {
   account: PaperTradingAccount

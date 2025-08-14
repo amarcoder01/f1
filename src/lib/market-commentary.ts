@@ -201,7 +201,8 @@ export class MarketCommentaryEngine {
     })
 
     // Check top movers for unusual activity
-    [...this.marketData.topMovers.gainers, ...this.marketData.topMovers.losers].forEach(mover => {
+    const allMovers = [...this.marketData.topMovers.gainers, ...this.marketData.topMovers.losers]
+    allMovers.forEach(mover => {
       if (Math.abs(mover.change) > 5) {
         this.addAlert({
           type: 'volume_spike',

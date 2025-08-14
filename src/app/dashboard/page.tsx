@@ -46,6 +46,7 @@ import { YahooFinanceChart } from '@/components/charts/YahooFinanceChart'
 import { ChatMessage } from '@/components/chat/ChatMessage'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { VoiceInput } from '@/components/chat/VoiceInput'
+import { NewsWidget } from '@/components/news/NewsWidget'
 import { AIChatMessage } from '@/types'
 
 // Generate a unique session ID for this browser session
@@ -655,7 +656,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Right Column - AI Chat */}
+          {/* Right Column - AI Chat & News */}
           <div className="space-y-6">
             {/* AI Chat */}
             <motion.div
@@ -762,11 +763,24 @@ export default function DashboardPage() {
               </Card>
             </motion.div>
 
-            {/* Market Overview */}
+            {/* News Widget */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.4 }}
+            >
+              <NewsWidget 
+                compact={true}
+                maxItems={4}
+                showMarketUpdates={true}
+              />
+            </motion.div>
+
+            {/* Market Overview */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.5 }}
             >
               <Card>
                 <CardHeader>
