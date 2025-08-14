@@ -10,8 +10,13 @@ datasource db {
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
-  name          String?
+  password      String
+  firstName     String
+  lastName      String
+  isEmailVerified Boolean @default(false)
+  lastLoginAt   DateTime?
   settings      Json?
+  preferences   Json?     @default("{\"theme\":\"system\",\"currency\":\"USD\",\"timezone\":\"UTC\",\"notifications\":{\"email\":true,\"push\":true,\"sms\":false}}")
   portfolios    Portfolio[]
   watchlists    Watchlist[]
   chatSessions  ChatSession[]

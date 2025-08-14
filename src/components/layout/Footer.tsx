@@ -9,6 +9,7 @@ import {
   CheckCircle,
   ExternalLink
 } from 'lucide-react'
+import { VidalityLogo } from '@/components/ui/VidalityLogo'
 
 export function Footer() {
   const scrollToTop = () => {
@@ -142,6 +143,9 @@ export function Footer() {
           <div className="flex flex-col lg:flex-row justify-between items-center space-y-4 lg:space-y-0">
             {/* Copyright */}
             <div className="text-center lg:text-left">
+              <div className="flex items-center justify-center lg:justify-start space-x-3 mb-2">
+                <VidalityLogo size="sm" variant="minimal" className="text-white" />
+              </div>
               <p className="text-sm text-slate-400">
                 © 2024 <span className="font-semibold text-white">Vidality Trading Platform</span>. All rights reserved.
               </p>

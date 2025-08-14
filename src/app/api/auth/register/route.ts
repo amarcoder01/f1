@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
-import { findUserByEmail, createUser, hashPassword } from '@/lib/auth-storage'
+import { createUser, userExists } from '@/lib/auth-db'
 import { registerRateLimiter } from '@/lib/rate-limiter'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = findUserByEmail(email)
+    const existingUser = await userExists(email)
     if (existingUser) {
       return NextResponse.json(
         { message: 'User with this email already exists' },
@@ -115,26 +115,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Hash password
-    const hashedPassword = await hashPassword(password)
-
     // Create new user
-    const newUser = createUser({
+    const newUser = await createUser({
       email: email.toLowerCase().trim(),
-      password: hashedPassword,
+      password,
       firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      isEmailVerified: false,
-      preferences: {
-        theme: 'system',
-        currency: 'USD',
-        timezone: 'UTC',
-        notifications: {
-          email: true,
-          push: true,
-          sms: false
-        }
-      }
+      lastName: lastName.trim()
     })
 
     // Create JWT token
@@ -144,12 +130,10 @@ export async function POST(request: NextRequest) {
       { expiresIn: '7d' }
     )
 
-    // Return user data (without password) and token
-    const { password: _, ...userWithoutPassword } = newUser
-    
+    // Return user data and token
     return NextResponse.json({
       user: {
-        ...userWithoutPassword,
+        ...newUser,
         lastLoginAt: new Date().toISOString()
       },
       token

@@ -20,6 +20,7 @@ import { useUIStore, useSettingsStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AuthProvider } from '@/components/auth/AuthProvider'
+import { VidalityLogo } from '@/components/ui/VidalityLogo'
 
 export function Header() {
   const { theme, setTheme, notifications } = useUIStore()
@@ -51,8 +52,12 @@ export function Header() {
       animate={{ y: 0, opacity: 1 }}
       className="h-16 bg-card border-b border-border flex items-center justify-between px-6"
     >
-      {/* Left Section - Search */}
-      <div className="flex items-center space-x-4">
+      {/* Left Section - Logo and Search */}
+      <div className="flex items-center space-x-6">
+        {/* Logo */}
+        <VidalityLogo size="lg" className="cursor-pointer" />
+        
+        {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input

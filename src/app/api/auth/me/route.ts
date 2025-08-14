@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
-import { findUserById } from '@/lib/auth-storage'
+import { findUserById } from '@/lib/auth-db'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string }
     
     // Find user
-    const user = findUserById(decoded.userId)
+    const user = await findUserById(decoded.userId)
     if (!user) {
       return NextResponse.json(
         { message: 'User not found' },
@@ -30,11 +30,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Return user data (without password)
-    const { password: _, ...userWithoutPassword } = user
-    
+    // Return user data
     return NextResponse.json({
-      user: userWithoutPassword
+      user
     })
 
   } catch (error) {

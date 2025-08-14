@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
-import { findUserByEmail, verifyPassword } from '@/lib/auth-storage'
+import { getUserWithPassword, verifyPassword, updateLastLogin } from '@/lib/auth-db'
 import { authRateLimiter } from '@/lib/rate-limiter'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
@@ -37,9 +37,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user
-    const user = findUserByEmail(email)
-    if (!user) {
+    // Find user with password
+    const userData = await getUserWithPassword(email)
+    if (!userData) {
       return NextResponse.json(
         { message: 'Invalid email or password' },
         { status: 401 }
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isValidPassword = await verifyPassword(password, user.password)
+    const isValidPassword = await verifyPassword(password, userData.password)
     if (!isValidPassword) {
       return NextResponse.json(
         { message: 'Invalid email or password' },
@@ -55,23 +55,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Update last login
+    await updateLastLogin(userData.user.id)
+
     // Reset rate limit on successful login
     authRateLimiter.reset(rateLimitKey)
 
     // Create JWT token
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: userData.user.id, email: userData.user.email },
       JWT_SECRET,
       { expiresIn: '7d' }
     )
 
-    // Return user data (without password) and token
-    const { password: _, ...userWithoutPassword } = user
-    
+    // Return user data and token
     return NextResponse.json({
       user: {
-        ...userWithoutPassword,
-        lastLoginAt: new Date().toISOString()
+        ...userData.user,
+        lastLoginAt: userData.user.lastLoginAt?.toISOString() || new Date().toISOString()
       },
       token
     })
