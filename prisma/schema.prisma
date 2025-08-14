@@ -14,7 +14,11 @@ model User {
   firstName     String
   lastName      String
   isEmailVerified Boolean @default(false)
+  isAccountLocked Boolean @default(false)
+  isAccountDisabled Boolean @default(false)
   lastLoginAt   DateTime?
+  failedLoginAttempts Int @default(0)
+  lockoutUntil  DateTime?
   settings      Json?
   preferences   Json?     @default("{\"theme\":\"system\",\"currency\":\"USD\",\"timezone\":\"UTC\",\"notifications\":{\"email\":true,\"push\":true,\"sms\":false}}")
   portfolios    Portfolio[]
@@ -22,8 +26,55 @@ model User {
   chatSessions  ChatSession[]
   paperTradingAccounts PaperTradingAccount[]
   priceAlerts   PriceAlert[]
+  loginAttempts LoginAttempt[]
+  userSessions  UserSession[]
+  deviceTrusts  DeviceTrust[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model LoginAttempt {
+  id              String    @id @default(cuid())
+  userId          String?
+  email           String
+  ipAddress       String
+  userAgent       String
+  deviceFingerprint String
+  success         Boolean
+  failureReason   String?
+  location        String?
+  timestamp       DateTime  @default(now())
+  
+  user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSession {
+  id              String    @id @default(cuid())
+  userId          String
+  refreshToken    String    @unique
+  deviceFingerprint String
+  ipAddress       String
+  userAgent       String
+  isActive        Boolean   @default(true)
+  expiresAt       DateTime
+  lastUsedAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DeviceTrust {
+  id              String    @id @default(cuid())
+  userId          String
+  deviceFingerprint String
+  deviceName      String
+  isTrusted       Boolean   @default(false)
+  lastUsedAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, deviceFingerprint])
 }
 
 model Portfolio {

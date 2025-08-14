@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
-import { createUser, userExists } from '@/lib/auth-db'
-import { registerRateLimiter } from '@/lib/rate-limiter'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+import { AuthService } from '@/lib/auth-service'
+import { AuthError, AuthErrorType } from '@/lib/auth-security'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,137 +9,60 @@ export async function POST(request: NextRequest) {
     // Validate input
     if (!email || !password || !firstName || !lastName) {
       return NextResponse.json(
-        { message: 'All fields are required' },
-        { status: 400 }
-      )
-    }
-
-    // Rate limiting
-    const clientIP = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
-    const rateLimitKey = `register:${clientIP}`
-    
-    if (!registerRateLimiter.isAllowed(rateLimitKey)) {
-      const remainingTime = registerRateLimiter.getRemainingTime(rateLimitKey)
-      return NextResponse.json(
         { 
-          message: 'Too many registration attempts. Please try again later.',
-          retryAfter: Math.ceil(remainingTime / 1000)
+          message: 'All fields are required',
+          type: 'VALIDATION_ERROR'
         },
-        { 
-          status: 429,
-          headers: {
-            'Retry-After': Math.ceil(remainingTime / 1000).toString()
-          }
-        }
-      )
-    }
-
-    // Check if user already exists
-    const existingUser = await userExists(email)
-    if (existingUser) {
-      return NextResponse.json(
-        { message: 'User with this email already exists' },
-        { status: 409 }
-      )
-    }
-
-    // Validate password strength
-    if (password.length < 8) {
-      return NextResponse.json(
-        { message: 'Password must be at least 8 characters long' },
         { status: 400 }
       )
     }
 
-    // Check for password complexity
-    if (!/(?=.*[a-z])/.test(password)) {
-      return NextResponse.json(
-        { message: 'Password must contain at least one lowercase letter' },
-        { status: 400 }
-      )
-    }
+    // Enhanced user creation with comprehensive security
+    const user = await AuthService.createUser({ email, password, firstName, lastName }, request)
 
-    if (!/(?=.*[A-Z])/.test(password)) {
-      return NextResponse.json(
-        { message: 'Password must contain at least one uppercase letter' },
-        { status: 400 }
-      )
-    }
+    // Generate tokens for new user
+    const { accessToken, refreshToken } = await AuthService.loginUser(email, password, request)
 
-    if (!/(?=.*\d)/.test(password)) {
-      return NextResponse.json(
-        { message: 'Password must contain at least one number' },
-        { status: 400 }
-      )
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { message: 'Please enter a valid email address' },
-        { status: 400 }
-      )
-    }
-
-    // Validate names
-    if (!firstName.trim() || firstName.trim().length < 2) {
-      return NextResponse.json(
-        { message: 'First name must be at least 2 characters long' },
-        { status: 400 }
-      )
-    }
-
-    if (!lastName.trim() || lastName.trim().length < 2) {
-      return NextResponse.json(
-        { message: 'Last name must be at least 2 characters long' },
-        { status: 400 }
-      )
-    }
-
-    // Validate name format (only letters and spaces)
-    if (!/^[a-zA-Z\s]+$/.test(firstName.trim())) {
-      return NextResponse.json(
-        { message: 'First name can only contain letters and spaces' },
-        { status: 400 }
-      )
-    }
-
-    if (!/^[a-zA-Z\s]+$/.test(lastName.trim())) {
-      return NextResponse.json(
-        { message: 'Last name can only contain letters and spaces' },
-        { status: 400 }
-      )
-    }
-
-    // Create new user
-    const newUser = await createUser({
-      email: email.toLowerCase().trim(),
-      password,
-      firstName: firstName.trim(),
-      lastName: lastName.trim()
-    })
-
-    // Create JWT token
-    const token = jwt.sign(
-      { userId: newUser.id, email: newUser.email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    )
-
-    // Return user data and token
-    return NextResponse.json({
+    // Set secure HTTP-only cookies
+    const response = NextResponse.json({
       user: {
-        ...newUser,
+        ...user,
         lastLoginAt: new Date().toISOString()
       },
-      token
+      accessToken,
+      message: 'Account created successfully'
     }, { status: 201 })
+
+    // Set refresh token as HTTP-only cookie
+    response.cookies.set('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60, // 30 days
+      path: '/'
+    })
+
+    return response
 
   } catch (error) {
     console.error('Registration error:', error)
+
+    if (error instanceof AuthError) {
+      return NextResponse.json(
+        { 
+          message: error.message,
+          type: error.type,
+          details: error.details
+        },
+        { status: error.code }
+      )
+    }
+
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { 
+        message: 'An unexpected error occurred during registration',
+        type: 'UNKNOWN_ERROR'
+      },
       { status: 500 }
     )
   }

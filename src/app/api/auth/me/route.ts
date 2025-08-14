@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
-import { findUserById } from '@/lib/auth-db'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+import { AuthService } from '@/lib/auth-service'
+import { AuthError, AuthErrorType, verifyToken, SECURITY_CONFIG } from '@/lib/auth-security'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +8,10 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { message: 'No token provided' },
+        { 
+          message: 'No authentication token provided',
+          type: 'INVALID_TOKEN'
+        },
         { status: 401 }
       )
     }
@@ -19,13 +20,16 @@ export async function GET(request: NextRequest) {
     const token = authHeader.substring(7)
 
     // Verify token
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string }
+    const decoded = verifyToken(token, SECURITY_CONFIG.JWT_SECRET) as { userId: string; email: string }
     
     // Find user
-    const user = await findUserById(decoded.userId)
+    const user = await AuthService.getUserById(decoded.userId)
     if (!user) {
       return NextResponse.json(
-        { message: 'User not found' },
+        { 
+          message: 'User not found',
+          type: 'USER_NOT_FOUND'
+        },
         { status: 404 }
       )
     }
@@ -37,8 +41,22 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Auth check error:', error)
+
+    if (error instanceof AuthError) {
+      return NextResponse.json(
+        { 
+          message: error.message,
+          type: error.type
+        },
+        { status: error.code }
+      )
+    }
+
     return NextResponse.json(
-      { message: 'Invalid token' },
+      { 
+        message: 'Authentication failed',
+        type: 'AUTHENTICATION_ERROR'
+      },
       { status: 401 }
     )
   }

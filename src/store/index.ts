@@ -1013,22 +1013,45 @@ export const useAuthStore = create<AuthStore>()(
             body: JSON.stringify(credentials)
           })
           
+          const data = await response.json()
+          
           if (response.ok) {
-            const data: AuthResponse = await response.json()
             set({
               user: data.user,
-              token: data.token,
+              token: data.accessToken,
               isAuthenticated: true,
               isLoading: false,
               error: null
             })
+            
+            // Store access token in localStorage (refresh token is in HTTP-only cookie)
+            localStorage.setItem('token', data.accessToken)
+            
+            // Handle suspicious activity warning
+            if (data.suspiciousActivity) {
+              console.warn('Suspicious activity detected:', data.suspiciousReasons)
+              // You could show a warning modal here
+            }
           } else {
-            const errorData = await response.json()
+            // Handle different error types
+            let errorMessage = data.message || 'Login failed'
+            
+            if (data.type === 'RATE_LIMIT_EXCEEDED') {
+              const retryAfter = response.headers.get('Retry-After')
+              errorMessage = `Too many login attempts. Please try again in ${retryAfter || '15 minutes'}.`
+            } else if (data.type === 'ACCOUNT_LOCKED') {
+              errorMessage = 'Account is temporarily locked due to multiple failed login attempts. Please try again later.'
+            } else if (data.type === 'ACCOUNT_DISABLED') {
+              errorMessage = 'This account has been disabled. Please contact support.'
+            } else if (data.type === 'INVALID_CREDENTIALS') {
+              errorMessage = 'Invalid email or password'
+            }
+            
             set({
-              error: errorData.message || 'Login failed',
+              error: errorMessage,
               isLoading: false
             })
-            throw new Error(errorData.message || 'Login failed')
+            throw new Error(errorMessage)
           }
         } catch (error) {
           console.error('Login error:', error)
@@ -1049,22 +1072,38 @@ export const useAuthStore = create<AuthStore>()(
             body: JSON.stringify(credentials)
           })
           
+          const data = await response.json()
+          
           if (response.ok) {
-            const data: AuthResponse = await response.json()
             set({
               user: data.user,
-              token: data.token,
+              token: data.accessToken,
               isAuthenticated: true,
               isLoading: false,
               error: null
             })
+            
+            // Store access token in localStorage (refresh token is in HTTP-only cookie)
+            localStorage.setItem('token', data.accessToken)
           } else {
-            const errorData = await response.json()
+            // Handle different error types
+            let errorMessage = data.message || 'Registration failed'
+            
+            if (data.type === 'VALIDATION_ERROR' && data.details?.errors) {
+              // Format validation errors
+              const errorDetails = Object.entries(data.details.errors)
+                .map(([field, message]) => `${field}: ${message}`)
+                .join(', ')
+              errorMessage = `Validation failed: ${errorDetails}`
+            } else if (data.type === 'RATE_LIMIT_EXCEEDED') {
+              errorMessage = 'Too many registration attempts. Please try again later.'
+            }
+            
             set({
-              error: errorData.message || 'Registration failed',
+              error: errorMessage,
               isLoading: false
             })
-            throw new Error(errorData.message || 'Registration failed')
+            throw new Error(errorMessage)
           }
         } catch (error) {
           console.error('Registration error:', error)
@@ -1076,13 +1115,28 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
       
-      logout: () => {
+      logout: async () => {
+        try {
+          // Call logout API to invalidate session
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          })
+        } catch (error) {
+          console.error('Logout API error:', error)
+          // Continue with logout even if API call fails
+        }
+        
+        // Clear local state
         set({
           user: null,
           token: null,
           isAuthenticated: false,
           error: null
         })
+        
+        // Clear localStorage
+        localStorage.removeItem('token')
       },
       
       clearError: () => set({ error: null }),
@@ -1092,25 +1146,23 @@ export const useAuthStore = create<AuthStore>()(
       })),
       
       refreshToken: async () => {
-        const { token } = get()
-        if (!token) return
-        
         try {
           const response = await fetch('/api/auth/refresh', {
             method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Content-Type': 'application/json' }
+            // Refresh token is sent via HTTP-only cookie
           })
           
           if (response.ok) {
-            const data: AuthResponse = await response.json()
+            const data = await response.json()
             set({
               user: data.user,
-              token: data.token,
+              token: data.accessToken,
               isAuthenticated: true
             })
+            
+            // Update localStorage
+            localStorage.setItem('token', data.accessToken)
           } else {
             // Token is invalid, logout user
             get().logout()
