@@ -146,19 +146,19 @@ export function validatePassword(password: string): { isValid: boolean; errors: 
     errors.push(`Password must be at least ${SECURITY_CONFIG.PASSWORD_MIN_LENGTH} characters long`)
   }
   
-  if (SECURITY_CONFIG.PASSWORD_REQUIRE_UPPERCASE && !/(?=.*[A-Z])/.test(password)) {
+  if (SECURITY_CONFIG.PASSWORD_REQUIRE_UPPERCASE && !/[A-Z]/.test(password)) {
     errors.push('Password must contain at least one uppercase letter')
   }
   
-  if (SECURITY_CONFIG.PASSWORD_REQUIRE_LOWERCASE && !/(?=.*[a-z])/.test(password)) {
+  if (SECURITY_CONFIG.PASSWORD_REQUIRE_LOWERCASE && !/[a-z]/.test(password)) {
     errors.push('Password must contain at least one lowercase letter')
   }
   
-  if (SECURITY_CONFIG.PASSWORD_REQUIRE_NUMBERS && !/(?=.*\d)/.test(password)) {
+  if (SECURITY_CONFIG.PASSWORD_REQUIRE_NUMBERS && !/\d/.test(password)) {
     errors.push('Password must contain at least one number')
   }
   
-  if (SECURITY_CONFIG.PASSWORD_REQUIRE_SYMBOLS && !/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) {
+  if (SECURITY_CONFIG.PASSWORD_REQUIRE_SYMBOLS && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
     errors.push('Password must contain at least one special character')
   }
   
