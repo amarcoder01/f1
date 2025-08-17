@@ -287,7 +287,7 @@ export class PredictionMemoryEngine {
     // Update themes
     const themes = this.extractConversationThemes(entry.content)
     context.conversationThemes.push(...themes)
-    context.conversationThemes = [...new Set(context.conversationThemes)] // Remove duplicates
+    context.conversationThemes = Array.from(new Set(context.conversationThemes)) // Remove duplicates
 
     // Keep only last 30 conversation entries
     if (context.conversationHistory.length > 30) {
@@ -410,7 +410,7 @@ export class PredictionMemoryEngine {
         type: 'reminder',
         title: 'Prediction Performance Review',
         message: `You've received ${recentPredictions.length} predictions this week with average confidence of ${avgConfidence.toFixed(1)}%. Consider reviewing outcomes.`,
-        symbols: [...new Set(recentPredictions.map(p => p.symbol))],
+        symbols: Array.from(new Set(recentPredictions.map(p => p.symbol))),
         confidence: 75,
         priority: 'low',
         actionable: true,
@@ -477,7 +477,7 @@ export class PredictionMemoryEngine {
     const cutoffTime = Date.now() - (maxAgeHours * 60 * 60 * 1000)
 
     // Clean up chat contexts
-    for (const [sessionId, context] of this.chatContexts.entries()) {
+    for (const [sessionId, context] of Array.from(this.chatContexts.entries())) {
       if (new Date(context.lastActivity).getTime() < cutoffTime) {
         this.chatContexts.delete(sessionId)
         console.log(`🧹 Cleaned up chat context for session ${sessionId}`)
@@ -485,7 +485,7 @@ export class PredictionMemoryEngine {
     }
 
     // Clean up prediction history
-    for (const [sessionId, history] of this.predictionHistory.entries()) {
+    for (const [sessionId, history] of Array.from(this.predictionHistory.entries())) {
       const filtered = history.filter(h => new Date(h.timestamp).getTime() >= cutoffTime)
       if (filtered.length < history.length) {
         this.predictionHistory.set(sessionId, filtered)

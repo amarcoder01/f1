@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     let result = ''
     let error = ''
 
-    return new Promise((resolve) => {
+    return new Promise<Response>((resolve) => {
       pythonProcess.stdout.on('data', (data) => {
         result += data.toString()
         console.log('Python stdout:', data.toString())
@@ -236,6 +236,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred'
-    })
+    }, { status: 500 })
   }
 }

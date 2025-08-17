@@ -222,7 +222,7 @@ export class PaperTradingService {
       })
 
       // Update account and positions
-      await this.updateAccountAfterTrade(order.accountId, order.symbol, order.side, order.quantity, executionPrice, commission)
+      await this.updateAccountAfterTrade(order.accountId, order.symbol, order.side as 'buy' | 'sell', order.quantity, executionPrice, commission)
     } catch (error) {
       console.error('Error processing market order:', error)
       throw error

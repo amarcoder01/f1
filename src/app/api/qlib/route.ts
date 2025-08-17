@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function getQlibStatus() {
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const pythonProcess = spawn('python', ['qlib_config.py'])
     let output = ''
     let error = ''
@@ -88,7 +88,7 @@ async function getQlibStatus() {
 }
 
 async function getDataStatus() {
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const pythonProcess = spawn('python', ['scripts/qlib_data_manager.py', '--status'])
     let output = ''
     let error = ''
@@ -127,7 +127,7 @@ async function getDataStatus() {
 async function downloadData(params: any) {
   const { symbols, start_date, end_date } = params
 
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const args = ['scripts/qlib_data_manager.py', '--download']
     if (symbols) args.push('--symbols', symbols.join(','))
     if (start_date) args.push('--start-date', start_date)
@@ -169,7 +169,7 @@ async function downloadData(params: any) {
 }
 
 async function processData(params: any) {
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const pythonProcess = spawn('python', ['scripts/qlib_data_manager.py', '--process'])
     let output = ''
     let error = ''
@@ -208,7 +208,7 @@ async function processData(params: any) {
 async function runBacktest(params: any) {
   const { strategy_name, symbols, start_date, end_date, parameters } = params
 
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const args = ['scripts/enhanced_backtesting_cli.py', 'backtest']
     args.push('--strategy', strategy_name)
     args.push('--symbols', symbols.join(','))
@@ -257,7 +257,7 @@ async function runBacktest(params: any) {
 async function compareStrategies(params: any) {
   const { symbols, start_date, end_date } = params
 
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const args = ['scripts/enhanced_backtesting_cli.py', 'compare']
     args.push('--symbols', symbols.join(','))
     args.push('--start-date', start_date)
@@ -299,7 +299,7 @@ async function compareStrategies(params: any) {
 }
 
 async function setupDataset() {
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const pythonProcess = spawn('python', ['scripts/qlib_data_manager.py', '--setup-dataset'])
     let output = ''
     let error = ''
@@ -331,7 +331,7 @@ async function setupDataset() {
 }
 
 async function backupData() {
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const pythonProcess = spawn('python', ['scripts/qlib_data_manager.py', '--backup'])
     let output = ''
     let error = ''
@@ -368,7 +368,7 @@ async function backupData() {
 }
 
 async function getExperiments() {
-  return new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     const pythonProcess = spawn('python', ['scripts/qlib_backtesting.py', '--experiments'])
     let output = ''
     let error = ''

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, LineStyle } from 'lightweight-charts'
+import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, LineStyle, Time } from 'lightweight-charts'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -49,7 +49,7 @@ interface AdvancedChartingComponentProps {
 interface TechnicalIndicator {
   id: string
   name: string
-  data: Array<{ time: number; value: number }>
+  data: Array<{ time: Time; value: number }>
   color: string
   lineWidth?: number
   lineStyle?: LineStyle
@@ -238,7 +238,7 @@ export function AdvancedChartingComponent({
         // Set candlestick data
         if (chartData.length > 0) {
           const formattedData = chartData.map(d => ({
-            time: d.time,
+            time: d.time as Time,
             open: Number(d.open),
             high: Number(d.high),
             low: Number(d.low),
@@ -262,7 +262,7 @@ export function AdvancedChartingComponent({
         // Convert OHLCV data to line data
         if (chartData.length > 0) {
           const lineData = chartData.map(d => ({
-            time: d.time,
+            time: d.time as Time,
             value: Number(d.close)
           }))
           lineSeries.setData(lineData)
@@ -277,17 +277,13 @@ export function AdvancedChartingComponent({
             type: 'volume',
           },
           priceScaleId: '',
-          scaleMargins: {
-            top: 0.8,
-            bottom: 0,
-          },
         })
         volumeSeriesRef.current = volumeSeries
 
         // Set volume data
         if (chartData.length > 0) {
           const volumeData = chartData.map(d => ({
-            time: d.time,
+            time: d.time as Time,
             value: d.volume,
             color: d.close >= d.open ? currentTheme.upColor : currentTheme.downColor
           }))
@@ -302,7 +298,7 @@ export function AdvancedChartingComponent({
             try {
               const series = chart.addLineSeries({
                 color: indicator.color,
-                lineWidth: indicator.lineWidth || 2,
+                lineWidth: (indicator.lineWidth || 2) as any,
                 lineStyle: indicator.lineStyle || LineStyle.Solid,
               })
               indicatorSeriesRefs.current.set(indicator.id, series)
@@ -369,7 +365,7 @@ export function AdvancedChartingComponent({
         volume: item.volume || 0
       }))
 
-      const uniqueData = data.filter((item, index, self) => 
+      const uniqueData = data.filter((item: any, index: number, self: any[]) => 
         index === self.findIndex(t => t.time === item.time)
       )
 
@@ -582,7 +578,7 @@ export function AdvancedChartingComponent({
     for (let i = period - 1; i < data.length; i++) {
       const sum = data.slice(i - period + 1, i + 1).reduce((acc, d) => acc + d.close, 0)
       smaData.push({
-        time: data[i].time,
+        time: data[i].time as Time,
         value: sum / period
       })
     }
@@ -595,10 +591,26 @@ export function AdvancedChartingComponent({
     
     // First EMA is SMA
     let ema = data.slice(0, period).reduce((acc, d) => acc + d.close, 0) / period
-    emaData.push({ time: data[period - 1].time, value: ema })
+    emaData.push({ time: data[period - 1].time as Time, value: ema })
     
     for (let i = period; i < data.length; i++) {
       ema = (data[i].close * multiplier) + (ema * (1 - multiplier))
+      emaData.push({ time: data[i].time as Time, value: ema })
+    }
+    
+    return emaData
+  }
+
+  const calculateEMAForLineData = (data: Array<{ time: Time; value: number }>, period: number) => {
+    const emaData = []
+    const multiplier = 2 / (period + 1)
+    
+    // First EMA is SMA
+    let ema = data.slice(0, period).reduce((acc, d) => acc + d.value, 0) / period
+    emaData.push({ time: data[period - 1].time, value: ema })
+    
+    for (let i = period; i < data.length; i++) {
+      ema = (data[i].value * multiplier) + (ema * (1 - multiplier))
       emaData.push({ time: data[i].time, value: ema })
     }
     
@@ -624,7 +636,7 @@ export function AdvancedChartingComponent({
       const rs = avgGain / avgLoss
       const rsi = 100 - (100 / (1 + rs))
       
-      rsiData.push({ time: data[i].time, value: rsi })
+      rsiData.push({ time: data[i].time as Time, value: rsi })
     }
     
     return rsiData
@@ -640,14 +652,14 @@ export function AdvancedChartingComponent({
       const slowIndex = slowEMA.findIndex(d => d.time === fastEMA[i].time)
       if (slowIndex !== -1) {
         macdData.push({
-          time: fastEMA[i].time,
+          time: fastEMA[i].time as Time,
           value: fastEMA[i].value - slowEMA[slowIndex].value
         })
       }
     }
     
     // Calculate signal line
-    const signalData = calculateEMA(macdData, signalPeriod)
+    const signalData = calculateEMAForLineData(macdData, signalPeriod)
     
     return { macd: macdData, signal: signalData }
   }
@@ -664,11 +676,11 @@ export function AdvancedChartingComponent({
       const standardDeviation = Math.sqrt(variance)
       
       upper.push({
-        time: data[i].time,
+        time: data[i].time as Time,
         value: sma + (standardDeviation * stdDev)
       })
       lower.push({
-        time: data[i].time,
+        time: data[i].time as Time,
         value: sma - (standardDeviation * stdDev)
       })
     }
@@ -687,10 +699,10 @@ export function AdvancedChartingComponent({
       const close = data[i].close
 
       const k = ((close - low) / (high - low)) * 100
-      kData.push({ time: data[i].time, value: k })
+      kData.push({ time: data[i].time as Time, value: k })
     }
 
-    dData = calculateEMA(kData, signalPeriod)
+    dData = calculateEMAForLineData(kData, signalPeriod)
 
     return { k: kData, d: dData }
   }
@@ -705,7 +717,7 @@ export function AdvancedChartingComponent({
       const close = data[i].close
 
       const williams = ((high - close) / (high - low)) * -100
-      williamsData.push({ time: data[i].time, value: williams })
+      williamsData.push({ time: data[i].time as Time, value: williams })
     }
 
     return williamsData
@@ -721,10 +733,10 @@ export function AdvancedChartingComponent({
       const lowClose = Math.abs(data[i].low - data[i - 1].close)
 
       const tr = Math.max(highLow, Math.max(highClose, lowClose))
-      atrData.push({ time: data[i].time, value: tr })
+      atrData.push({ time: data[i].time as Time, value: tr })
     }
 
-    const emaData = calculateEMA(atrData, period)
+    const emaData = calculateEMAForLineData(atrData, period)
     return emaData
   }
 
@@ -745,7 +757,7 @@ export function AdvancedChartingComponent({
       const low = Math.min(...slice.map(d => d.low))
 
       tenkan.push({
-        time: data[i].time,
+        time: data[i].time as Time,
         value: (high + low) / 2
       })
     }
@@ -756,7 +768,7 @@ export function AdvancedChartingComponent({
       const low = Math.min(...slice.map(d => d.low))
 
       kijun.push({
-        time: data[i].time,
+        time: data[i].time as Time,
         value: (high + low) / 2
       })
     }
@@ -767,7 +779,7 @@ export function AdvancedChartingComponent({
       const low = Math.min(...slice.map(d => d.low))
 
       senkouB.push({
-        time: data[i].time,
+        time: data[i].time as Time,
         value: (high + low) / 2
       })
     }
@@ -778,7 +790,7 @@ export function AdvancedChartingComponent({
       const kijunValue = kijun[i]?.value || 0
       
       senkouA.push({
-        time: data[i + 26]?.time || data[data.length - 1].time,
+        time: (data[i + 26]?.time || data[data.length - 1].time) as Time,
         value: (tenkanValue + kijunValue) / 2
       })
     }
@@ -818,7 +830,7 @@ export function AdvancedChartingComponent({
         }
       }
 
-      sarData.push({ time: data[i].time, value: sar })
+      sarData.push({ time: data[i].time as Time, value: sar })
     }
 
     return sarData
@@ -835,7 +847,7 @@ export function AdvancedChartingComponent({
       const meanDeviation = typicalPrices.reduce((sum, tp) => sum + Math.abs(tp - sma), 0) / period
 
       const cci = meanDeviation === 0 ? 0 : (typicalPrices[typicalPrices.length - 1] - sma) / (0.015 * meanDeviation)
-      cciData.push({ time: data[i].time, value: cci })
+      cciData.push({ time: data[i].time as Time, value: cci })
     }
 
     return cciData
@@ -863,7 +875,7 @@ export function AdvancedChartingComponent({
 
       const moneyRatio = negativeFlow === 0 ? 100 : positiveFlow / negativeFlow
       const mfi = 100 - (100 / (1 + moneyRatio))
-      mfiData.push({ time: data[i].time, value: mfi })
+      mfiData.push({ time: data[i].time as Time, value: mfi })
     }
 
     return mfiData

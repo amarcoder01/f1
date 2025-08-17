@@ -6,9 +6,7 @@ import {
   User, 
   Settings, 
   LogOut, 
-  ChevronDown, 
-  Shield,
-  Bell
+  ChevronDown
 } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { Button } from '@/components/ui/button'
@@ -16,6 +14,7 @@ import { useRouter } from 'next/navigation'
 
 export function UserMenu() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const { user, logout } = useAuthStore()
   const router = useRouter()
@@ -31,9 +30,16 @@ export function UserMenu() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleLogout = () => {
-    logout()
-    setIsOpen(false)
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      setIsLoggingOut(false)
+      setIsOpen(false)
+    }
   }
 
   const getInitials = (firstName: string, lastName: string) => {
@@ -51,21 +57,21 @@ export function UserMenu() {
         className="flex items-center space-x-3 px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors"
       >
         <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
-          {user.avatar ? (
+          {user?.avatar ? (
             <img 
-              src={user.avatar} 
-              alt={`${user.firstName} ${user.lastName}`}
+              src={user?.avatar || ''} 
+              alt={`${user?.firstName || ''} ${user?.lastName || ''}`}
               className="w-8 h-8 rounded-full object-cover"
             />
           ) : (
-            getInitials(user.firstName, user.lastName)
+            getInitials(user?.firstName || '', user?.lastName || '')
           )}
         </div>
         <div className="hidden md:flex flex-col items-start">
           <span className="text-sm font-medium text-gray-900">
-            {user.firstName} {user.lastName}
+            {user?.firstName || ''} {user?.lastName || ''}
           </span>
-          <span className="text-xs text-gray-500">{user.email}</span>
+          <span className="text-xs text-gray-500">{user?.email || ''}</span>
         </div>
         <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </Button>
@@ -83,71 +89,49 @@ export function UserMenu() {
             <div className="px-4 py-3 border-b border-gray-100">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium">
-                  {user.avatar ? (
+                  {user?.avatar ? (
                     <img 
-                      src={user.avatar} 
-                      alt={`${user.firstName} ${user.lastName}`}
+                      src={user?.avatar || ''} 
+                      alt={`${user?.firstName || ''} ${user?.lastName || ''}`}
                       className="w-10 h-10 rounded-full object-cover"
                     />
                   ) : (
-                    getInitials(user.firstName, user.lastName)
+                    getInitials(user?.firstName || '', user?.lastName || '')
                   )}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-900">
-                    {user.firstName} {user.lastName}
+                    {user?.firstName || ''} {user?.lastName || ''}
                   </p>
-                  <p className="text-xs text-gray-500">{user.email}</p>
+                  <p className="text-xs text-gray-500">{user?.email || ''}</p>
                 </div>
               </div>
             </div>
 
-                         {/* Menu Items */}
-             <div className="py-1">
-               <button
-                 onClick={() => {
-                   setIsOpen(false)
-                   router.push('/profile')
-                 }}
-                 className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-               >
-                 <User className="w-4 h-4" />
-                 <span>Profile</span>
-               </button>
-               
-               <button
-                 onClick={() => {
-                   setIsOpen(false)
-                   router.push('/settings')
-                 }}
-                 className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-               >
-                 <Settings className="w-4 h-4" />
-                 <span>Settings</span>
-               </button>
-               
-               <button
-                 onClick={() => {
-                   setIsOpen(false)
-                   router.push('/notifications')
-                 }}
-                 className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-               >
-                 <Bell className="w-4 h-4" />
-                 <span>Notifications</span>
-               </button>
-               
-               <button
-                 onClick={() => {
-                   setIsOpen(false)
-                   router.push('/security')
-                 }}
-                 className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-               >
-                 <Shield className="w-4 h-4" />
-                 <span>Security</span>
-               </button>
-             </div>
+            {/* Menu Items */}
+            <div className="py-1">
+              <button
+                onClick={() => {
+                  setIsOpen(false)
+                  router.push('/profile')
+                }}
+                className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <User className="w-4 h-4" />
+                <span>Profile</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setIsOpen(false)
+                  router.push('/settings')
+                }}
+                className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                <span>Settings</span>
+              </button>
+            </div>
 
             {/* Divider */}
             <div className="border-t border-gray-100 my-1" />
@@ -156,10 +140,20 @@ export function UserMenu() {
             <div className="py-1">
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                disabled={isLoggingOut}
+                className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <LogOut className="w-4 h-4" />
-                <span>Sign Out</span>
+                {isLoggingOut ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                    <span>Signing Out...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out</span>
+                  </>
+                )}
               </button>
             </div>
           </motion.div>

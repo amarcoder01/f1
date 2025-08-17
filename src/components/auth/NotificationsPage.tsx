@@ -247,8 +247,8 @@ export function NotificationsPage() {
                     <Mail className="w-4 h-4 text-gray-400" />
                     <span className="text-sm text-gray-700">Email Notifications</span>
                   </div>
-                  <Badge className={user.preferences.notifications.email ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                    {user.preferences.notifications.email ? 'On' : 'Off'}
+                  <Badge className={user?.preferences?.notifications?.email ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                    {user?.preferences?.notifications?.email ? 'On' : 'Off'}
                   </Badge>
                 </div>
                 
@@ -257,8 +257,8 @@ export function NotificationsPage() {
                     <Bell className="w-4 h-4 text-gray-400" />
                     <span className="text-sm text-gray-700">Push Notifications</span>
                   </div>
-                  <Badge className={user.preferences.notifications.push ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                    {user.preferences.notifications.push ? 'On' : 'Off'}
+                  <Badge className={user?.preferences?.notifications?.push ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                    {user?.preferences?.notifications?.push ? 'On' : 'Off'}
                   </Badge>
                 </div>
                 
@@ -267,8 +267,8 @@ export function NotificationsPage() {
                     <Smartphone className="w-4 h-4 text-gray-400" />
                     <span className="text-sm text-gray-700">SMS Notifications</span>
                   </div>
-                  <Badge className={user.preferences.notifications.sms ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                    {user.preferences.notifications.sms ? 'On' : 'Off'}
+                  <Badge className={user?.preferences?.notifications?.sms ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                    {user?.preferences?.notifications?.sms ? 'On' : 'Off'}
                   </Badge>
                 </div>
               </div>

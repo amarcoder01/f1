@@ -399,5 +399,5 @@ export const SimpleChartImgChart = ({ symbol, ...props }: Omit<ChartImgChartProp
 )
 
 export const ChartImgChartWithIndicators = ({ symbol, indicators = ['sma', 'ema', 'rsi'], ...props }: ChartImgChartProps) => (
-  <ChartImgChart symbol={symbol} indicators={indicators} showIndicators={true} {...props} />
+  <ChartImgChart symbol={symbol} indicators={indicators} {...props} />
 )

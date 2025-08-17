@@ -1,7 +1,7 @@
 import twilio from 'twilio'
 
 class TwilioService {
-  private client: twilio.Twilio
+  private client?: twilio.Twilio
   private accountSid: string
   private authToken: string
   private fromNumber: string

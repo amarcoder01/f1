@@ -280,7 +280,30 @@ export class AdvancedToolExecutor {
     try {
       let totalValue = 0
       let totalCost = 0
-      const portfolioAnalysis = {
+      const portfolioAnalysis: {
+        holdings: Array<{
+          symbol: any;
+          shares: any;
+          avg_price: any;
+          current_price: number;
+          current_value: number;
+          cost_basis: number;
+          pnl: number;
+          pnl_percent: number;
+        }>;
+        total_value: number;
+        total_cost: number;
+        total_pnl: number;
+        total_pnl_percent: number;
+        risk_metrics: {
+          volatility: number;
+          beta: number;
+          sharpe_ratio: number;
+          max_drawdown: number;
+        };
+        allocation: {};
+        performance: {};
+      } = {
         holdings: [],
         total_value: 0,
         total_cost: 0,
@@ -346,7 +369,22 @@ export class AdvancedToolExecutor {
         return JSON.stringify({ error: `No data found for ${symbol}` })
       }
 
-      const riskAssessment = {
+      const riskAssessment: {
+        symbol: string;
+        analysis_type: string;
+        timeframe: string;
+        timestamp: string;
+        risk_metrics: {
+          volatility: number;
+          beta: number;
+          sharpe_ratio: number;
+          max_drawdown: number;
+          var_95: number;
+          var_99: number;
+        };
+        risk_level: string;
+        recommendations: string[];
+      } = {
         symbol,
         analysis_type: analysisType,
         timeframe,

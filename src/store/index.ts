@@ -21,6 +21,7 @@ import {
   RegisterCredentials,
   AuthResponse
 } from '@/types'
+import { trackAuthEvent, setUserId } from '@/lib/telemetry'
 
 // UI Store
 interface UIStore extends UIState {
@@ -256,20 +257,29 @@ export const useWatchlistStore = create<WatchlistStore>()(
             
             const newItem = { ...item, id: data.id, lastUpdated: new Date(data.lastUpdated) }
             
-            set((state) => ({
-              watchlists: state.watchlists.map(w =>
-                w.id === watchlistId
-                  ? { 
-                      ...w,
-                      items: [...w.items, newItem],
-                      updatedAt: new Date()
-                    }
-                  : w
-              ),
-              isLoading: false
-            }))
-            
-            console.log(`✅ Successfully added ${item.symbol} to watchlist in store`)
+            set((state) => {
+              const watchlist = state.watchlists.find(w => w.id === watchlistId)
+              const isUpdate = watchlist?.items.some(existingItem => existingItem.symbol === item.symbol)
+              
+              console.log(`✅ Successfully ${isUpdate ? 'updated' : 'added'} ${item.symbol} to watchlist in store`)
+              
+              return {
+                watchlists: state.watchlists.map(w =>
+                  w.id === watchlistId
+                    ? { 
+                        ...w,
+                        items: isUpdate
+                          ? w.items.map(existingItem => 
+                              existingItem.symbol === item.symbol ? newItem : existingItem
+                            )
+                          : [...w.items, newItem],
+                        updatedAt: new Date()
+                      }
+                    : w
+                ),
+                isLoading: false
+              }
+            })
           } else {
             const errorData = await response.json().catch(() => ({}))
             console.error('❌ Failed to add item to watchlist:', {
@@ -1007,6 +1017,14 @@ export const useAuthStore = create<AuthStore>()(
       login: async (credentials: LoginCredentials) => {
         set({ isLoading: true, error: null })
         try {
+          console.log('🔐 Auth Store: Attempting login...')
+          
+          // Track login attempt
+          trackAuthEvent('login_attempt', true, {
+            email: credentials.email,
+            timestamp: new Date().toISOString()
+          })
+          
           const response = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1014,27 +1032,57 @@ export const useAuthStore = create<AuthStore>()(
           })
           
           const data = await response.json()
+          console.log('🔐 Auth Store: Login response:', { status: response.status, data })
           
           if (response.ok) {
+            console.log('🔐 Auth Store: Login successful, setting user data...')
+            
+            // Handle both old and new API response formats
+            const userData = data.data?.user || data.user
+            const accessToken = data.data?.accessToken || data.accessToken
+            
+            console.log('🔐 Auth Store: Setting authentication state:', {
+              user: userData,
+              token: !!accessToken,
+              isAuthenticated: true
+            })
+            
             set({
-              user: data.user,
-              token: data.accessToken,
+              user: userData,
+              token: accessToken,
               isAuthenticated: true,
               isLoading: false,
               error: null
             })
             
+            console.log('🔐 Auth Store: Authentication state set successfully')
+            
+            // Set user ID for telemetry
+            setUserId(userData.id)
+            
             // Store access token in localStorage (refresh token is in HTTP-only cookie)
-            localStorage.setItem('token', data.accessToken)
+            localStorage.setItem('token', accessToken)
+            console.log('🔐 Auth Store: User authenticated successfully, isAuthenticated set to true')
+            
+            // Track successful login
+            trackAuthEvent('login_success', true, {
+              userId: userData.id,
+              email: userData.email,
+              timestamp: new Date().toISOString()
+            })
             
             // Handle suspicious activity warning
             if (data.suspiciousActivity) {
               console.warn('Suspicious activity detected:', data.suspiciousReasons)
-              // You could show a warning modal here
+              trackAuthEvent('suspicious_activity', false, {
+                userId: userData.id,
+                reasons: data.suspiciousReasons,
+                timestamp: new Date().toISOString()
+              })
             }
           } else {
             // Handle different error types
-            let errorMessage = data.message || 'Login failed'
+            let errorMessage = data.error || data.message || 'Login failed'
             
             if (data.type === 'RATE_LIMIT_EXCEEDED') {
               const retryAfter = response.headers.get('Retry-After')
@@ -1047,14 +1095,23 @@ export const useAuthStore = create<AuthStore>()(
               errorMessage = 'Invalid email or password'
             }
             
+            console.error('🔐 Auth Store: Login failed:', errorMessage)
             set({
               error: errorMessage,
               isLoading: false
             })
+            
+            // Track failed login
+            trackAuthEvent('login_failed', false, {
+              email: credentials.email,
+              reason: errorMessage,
+              timestamp: new Date().toISOString()
+            })
+            
             throw new Error(errorMessage)
           }
         } catch (error) {
-          console.error('Login error:', error)
+          console.error('🔐 Auth Store: Login error:', error)
           set({
             error: error instanceof Error ? error.message : 'Login failed',
             isLoading: false
@@ -1066,6 +1123,12 @@ export const useAuthStore = create<AuthStore>()(
       register: async (credentials: RegisterCredentials) => {
         set({ isLoading: true, error: null })
         try {
+          // Track registration attempt
+          trackAuthEvent('register_attempt', true, {
+            email: credentials.email,
+            timestamp: new Date().toISOString()
+          })
+          
           const response = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1073,23 +1136,17 @@ export const useAuthStore = create<AuthStore>()(
           })
           
           const data = await response.json()
+          console.log('🔐 Auth Store: Registration response:', { status: response.status, data })
           
-          if (response.ok) {
-            set({
-              user: data.user,
-              token: data.accessToken,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null
-            })
+          if (!response.ok) {
+            // Handle error responses FIRST before any state changes
+            let errorMessage = data.error || data.message || 'Registration failed'
             
-            // Store access token in localStorage (refresh token is in HTTP-only cookie)
-            localStorage.setItem('token', data.accessToken)
-          } else {
-            // Handle different error types
-            let errorMessage = data.message || 'Registration failed'
+            console.log('🔐 Auth Store: Registration failed:', { status: response.status, errorMessage })
             
-            if (data.type === 'VALIDATION_ERROR' && data.details?.errors) {
+            if (response.status === 409) {
+              errorMessage = 'An account with this email already exists'
+            } else if (data.type === 'VALIDATION_ERROR' && data.details?.errors) {
               // Format validation errors
               const errorDetails = Object.entries(data.details.errors)
                 .map(([field, message]) => `${field}: ${message}`)
@@ -1099,29 +1156,127 @@ export const useAuthStore = create<AuthStore>()(
               errorMessage = 'Too many registration attempts. Please try again later.'
             }
             
+            // Set error state and loading false - DO NOT change authentication state
             set({
               error: errorMessage,
-              isLoading: false
+              isLoading: false,
+              isAuthenticated: false,  // Explicitly ensure authentication is false
+              user: null,
+              token: null
+            })
+            
+            // Clear localStorage token to prevent confusion
+            localStorage.removeItem('token')
+            
+            // Clear any auth cookies from the client side as well
+            document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+            document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+            
+            // Track failed registration
+            trackAuthEvent('register_failed', false, {
+              email: credentials.email,
+              reason: errorMessage,
+              timestamp: new Date().toISOString()
+            })
+            
+            throw new Error(errorMessage)
+          }
+          
+          // Only process successful registration AFTER confirming response.ok
+          console.log('🔐 Auth Store: Registration successful, setting user data...')
+          
+          // Handle both old and new API response formats
+          const userData = data.data?.user || data.user
+          const accessToken = data.data?.accessToken || data.accessToken
+          
+          // Validate required data before setting authentication state
+          if (!userData || !accessToken) {
+            const errorMessage = 'Invalid registration response - missing user data or token'
+            set({
+              error: errorMessage,
+              isLoading: false,
+              isAuthenticated: false,
+              user: null,
+              token: null
             })
             throw new Error(errorMessage)
           }
+          
+          console.log('🔐 Auth Store: Setting registration authentication state:', {
+            user: userData,
+            token: !!accessToken,
+            isAuthenticated: true
+          })
+          
+          // Set successful authentication state
+          set({
+            user: userData,
+            token: accessToken,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null
+          })
+          
+          console.log('🔐 Auth Store: Registration authentication state set successfully')
+          
+          // Set user ID for telemetry
+          setUserId(userData.id)
+          
+          // Store access token in localStorage (refresh token is in HTTP-only cookie)
+          localStorage.setItem('token', accessToken)
+          console.log('🔐 Auth Store: User registered successfully, isAuthenticated set to true')
+          
+          // Track successful registration
+          trackAuthEvent('register_success', true, {
+            userId: userData.id,
+            email: userData.email,
+            timestamp: new Date().toISOString()
+          })
+          
         } catch (error) {
           console.error('Registration error:', error)
+          
+          // Ensure authentication state is cleared on any error
+          const errorMessage = error instanceof Error ? error.message : 'Registration failed'
           set({
-            error: error instanceof Error ? error.message : 'Registration failed',
-            isLoading: false
+            error: errorMessage,
+            isLoading: false,
+            isAuthenticated: false,  // Critical: ensure authentication is false
+            user: null,
+            token: null
           })
+          
+          // Clear localStorage token to prevent confusion
+          localStorage.removeItem('token')
+          
+          // Clear any auth cookies from the client side as well
+          document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+          document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+          
           throw error
         }
       },
       
       logout: async () => {
         try {
-          // Call logout API to invalidate session
+          console.log('🔐 Auth Store: Starting logout process...')
+          
+          // Track logout
+          const currentUser = useAuthStore.getState().user
+          if (currentUser) {
+            trackAuthEvent('logout', true, {
+              userId: currentUser.id,
+              email: currentUser.email,
+              timestamp: new Date().toISOString()
+            })
+          }
+          
+          // Call logout API to invalidate server-side session
           await fetch('/api/auth/logout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           })
+          console.log('🔐 Auth Store: Server logout API called successfully')
         } catch (error) {
           console.error('Logout API error:', error)
           // Continue with logout even if API call fails
@@ -1134,9 +1289,23 @@ export const useAuthStore = create<AuthStore>()(
           isAuthenticated: false,
           error: null
         })
+        console.log('🔐 Auth Store: Local state cleared')
         
         // Clear localStorage
         localStorage.removeItem('token')
+        console.log('🔐 Auth Store: localStorage cleared')
+        
+        // Clear token cookie by setting it to expire
+        document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        console.log('🔐 Auth Store: Cookies cleared')
+        
+        // Redirect to landing page with a small delay to ensure state is cleared
+        if (typeof window !== 'undefined') {
+          console.log('🔐 Auth Store: Redirecting to landing page...')
+          setTimeout(() => {
+            window.location.href = '/'
+          }, 100)
+        }
       },
       
       clearError: () => set({ error: null }),
@@ -1163,38 +1332,159 @@ export const useAuthStore = create<AuthStore>()(
             
             // Update localStorage
             localStorage.setItem('token', data.accessToken)
+            
+            // Track token refresh
+            trackAuthEvent('token_refresh', true, {
+              userId: data.user.id,
+              timestamp: new Date().toISOString()
+            })
           } else {
             // Token is invalid, logout user
-            get().logout()
+            trackAuthEvent('token_refresh_failed', false, {
+              timestamp: new Date().toISOString()
+            })
+            useAuthStore.getState().logout()
           }
         } catch (error) {
           console.error('Token refresh error:', error)
-          get().logout()
+          trackAuthEvent('token_refresh_error', false, {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            timestamp: new Date().toISOString()
+          })
+          useAuthStore.getState().logout()
         }
       },
       
       checkAuth: async () => {
-        const { token } = get()
-        if (!token) return
+        console.log('🔐 Auth Store: checkAuth called')
         
-        try {
-          const response = await fetch('/api/auth/me', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
+        // First check if we have a token in localStorage
+        const localToken = localStorage.getItem('token')
+        console.log('🔐 Auth Store: Checking authentication, localStorage token exists:', !!localToken)
+        
+        // Check if we have a token cookie (set by API)
+        const cookieToken = document.cookie
+          .split('; ')
+          .find(row => row.startsWith('token='))
+          ?.split('=')[1]
+        console.log('🔐 Auth Store: Cookie token exists:', !!cookieToken)
+        
+        // Use cookie token as the source of truth (since middleware uses it)
+        const validToken = cookieToken || localToken
+        
+        // If we have a token, validate it with the server before setting authenticated state
+        const currentState = useAuthStore.getState()
+        console.log('🔐 Auth Store: Current state:', {
+          isAuthenticated: currentState.isAuthenticated,
+          hasUser: !!currentState.user,
+          hasToken: !!currentState.token
+        })
+        
+        // If we already have a valid authentication state, don't re-check unnecessarily
+        if (currentState.isAuthenticated && currentState.user && currentState.token) {
+          console.log('🔐 Auth Store: Already authenticated, skipping re-check')
+          return
+        }
+        
+        if (validToken && !currentState.token) {
+          console.log('🔐 Auth Store: Found token, validating with server...')
           
-          if (response.ok) {
-            const data = await response.json()
-            set({
-              user: data.user,
-              isAuthenticated: true
+          try {
+            // Validate token with server
+            const response = await fetch('/api/auth/verify', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${validToken}`
+              }
             })
-          } else {
+            
+            if (response.ok) {
+              const data = await response.json()
+              console.log('🔐 Auth Store: Token validation successful')
+              set({ 
+                token: validToken, 
+                isAuthenticated: true,
+                user: data.user,
+                error: null
+              })
+              // Sync localStorage with cookie if needed
+              if (cookieToken && cookieToken !== localToken) {
+                localStorage.setItem('token', cookieToken)
+              }
+            } else {
+              console.log('🔐 Auth Store: Token validation failed, clearing auth state')
+              // Token is invalid, clear everything
+              set({ isAuthenticated: false, user: null, token: null })
+              localStorage.removeItem('token')
+              document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+              document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+            }
+          } catch (error) {
+            console.error('🔐 Auth Store: Token validation error:', error)
+            // Clear auth state on validation error
+            set({ isAuthenticated: false, user: null, token: null })
+            localStorage.removeItem('token')
+            document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+            document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+          }
+        }
+        
+        // If no token at all, user is not authenticated
+        if (!validToken) {
+          console.log('🔐 Auth Store: No token found, user not authenticated')
+          set({ isAuthenticated: false, user: null, token: null })
+          localStorage.removeItem('token')
+          return
+        }
+        
+        // Only make the /api/auth/me call if we don't already have user data
+        if (!currentState.user) {
+          const tokenToUse = localToken || currentState.token
+          
+          try {
+            console.log('🔐 Auth Store: Making auth check request...')
+            const response = await fetch('/api/auth/me', {
+              headers: { 'Authorization': `Bearer ${tokenToUse}` }
+            })
+            
+            console.log('🔐 Auth Store: Auth check response status:', response.status)
+            
+            if (response.ok) {
+              const data = await response.json()
+              console.log('🔐 Auth Store: Auth check successful, user data:', data)
+              set({
+                user: data.user,
+                token: tokenToUse,
+                isAuthenticated: true
+              })
+              
+              // Set user ID for telemetry
+              setUserId(data.user.id)
+              
+              // Track successful auth check
+              trackAuthEvent('auth_check_success', true, {
+                userId: data.user.id,
+                timestamp: new Date().toISOString()
+              })
+            } else {
+              console.log('🔐 Auth Store: Auth check failed, logging out...')
+              trackAuthEvent('auth_check_failed', false, {
+                timestamp: new Date().toISOString()
+              })
+              get().logout()
+            }
+          } catch (error) {
+            console.error('🔐 Auth Store: Auth check error:', error)
+            trackAuthEvent('auth_check_error', false, {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              timestamp: new Date().toISOString()
+            })
             get().logout()
           }
-        } catch (error) {
-          console.error('Auth check error:', error)
-          get().logout()
         }
+        
+        console.log('🔐 Auth Store: checkAuth completed')
       }
     }),
     {

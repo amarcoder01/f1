@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Mail, Lock, Eye, EyeOff, Loader2, User } from 'lucide-react'
 import { useAuthStore } from '@/store'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,8 +25,35 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [privacyPolicyAccepted, setPrivacyPolicyAccepted] = useState(false)
   
   const { register, error, clearError } = useAuthStore()
+  const router = useRouter()
+
+  // Clear any authentication state when modal opens to ensure clean state
+  React.useEffect(() => {
+    if (isOpen) {
+      console.log('🔐 RegisterModal: Modal opened, ensuring clean registration state')
+      clearError()
+      setValidationErrors({})
+      
+      // Always clear authentication state when opening registration modal
+      // This prevents interference from stale tokens or previous auth attempts
+      console.log('🔐 RegisterModal: Clearing auth state for fresh registration')
+      useAuthStore.setState({
+        isAuthenticated: false,
+        user: null,
+        token: null,
+        error: null,
+        isLoading: false
+      })
+      
+      // Clear all auth-related storage
+      localStorage.removeItem('token')
+      document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict'
+      document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict'
+    }
+  }, [isOpen, clearError])
 
   // Validation functions
   const validateEmail = (email: string): string => {
@@ -37,10 +65,11 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
 
   const validatePassword = (password: string): string => {
     if (!password) return 'Password is required'
-    if (password.length < 8) return 'Password must be at least 8 characters long'
-      if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter'
-  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter'
-  if (!/\d/.test(password)) return 'Password must contain at least one number'
+    if (password.length < 5) return 'Password must be at least 5 characters long'
+    if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter'
+    if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter'
+    if (!/\d/.test(password)) return 'Password must contain at least one number'
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) return 'Password must contain at least one special character'
     return ''
   }
 
@@ -82,6 +111,11 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
     const confirmPasswordError = validateConfirmPassword(confirmPassword, password)
     if (confirmPasswordError) errors.confirmPassword = confirmPasswordError
     
+    // Validate privacy policy acceptance
+    if (!privacyPolicyAccepted) {
+      errors.privacyPolicy = 'You must accept the Privacy Policy to continue'
+    }
+
     // If there are validation errors, don't submit
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors)
@@ -89,20 +123,66 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
     }
     
     setIsLoading(true)
+    let registrationSucceeded = false
     
     try {
-      await register({ email, password, firstName: firstName.trim(), lastName: lastName.trim() })
-      onClose()
+      // Call the register function - this will throw an error if registration fails
+      await register({ 
+        email, 
+        password, 
+        firstName: firstName.trim(), 
+        lastName: lastName.trim(),
+        privacyPolicyAccepted 
+      })
+      
+      // If we reach here, registration was successful
+      registrationSucceeded = true
+      console.log('🔐 RegisterModal: Registration succeeded, preparing to close modal and redirect')
+      
+    } catch (error: any) {
+      console.error('🔐 RegisterModal: Registration failed:', error)
+      
+      // Registration failed - handle the error and keep modal open
+      if (error?.message) {
+        if (error.message.includes('already exists')) {
+          setValidationErrors({ email: 'An account with this email already exists' })
+        } else if (error.message.includes('Validation failed')) {
+          // Parse validation errors if they exist
+          const validationError = error.message
+          if (validationError.includes('email')) {
+            setValidationErrors({ email: 'Please enter a valid email address' })
+          } else if (validationError.includes('password')) {
+            setValidationErrors({ password: 'Password does not meet requirements' })
+          } else {
+            setValidationErrors({ email: validationError })
+          }
+        } else {
+          setValidationErrors({ email: error.message })
+        }
+      } else {
+        setValidationErrors({ email: 'Registration failed. Please try again.' })
+      }
+    } finally {
+      setIsLoading(false)
+    }
+    
+    // Only close modal if registration actually succeeded
+    if (registrationSucceeded) {
+      console.log('🔐 RegisterModal: Registration succeeded, closing modal')
+      
+      // Clear form data
       setFirstName('')
       setLastName('')
       setEmail('')
       setPassword('')
       setConfirmPassword('')
       setValidationErrors({})
-    } catch (error) {
-      console.error('Registration failed:', error)
-    } finally {
-      setIsLoading(false)
+      
+      // Close modal immediately
+      onClose()
+      
+      // Let the parent component handle the redirect
+      console.log('🔐 RegisterModal: Registration completed successfully')
     }
   }
 
@@ -114,6 +194,7 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
     setEmail('')
     setPassword('')
     setConfirmPassword('')
+    setPrivacyPolicyAccepted(false)
     onClose()
   }
 
@@ -124,6 +205,7 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
     password && 
     confirmPassword && 
     password === confirmPassword &&
+    privacyPolicyAccepted &&
     Object.keys(validationErrors).length === 0
 
   return (
@@ -257,11 +339,11 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                 </div>
                 {validationErrors.password ? (
                   <p className="text-xs text-red-500">{validationErrors.password}</p>
-                ) : (
-                  <p className="text-xs text-gray-500">
-                    Must be at least 8 characters with uppercase, lowercase, and number
-                  </p>
-                )}
+                                 ) : (
+                   <p className="text-xs text-gray-500">
+                     Must be at least 5 characters with uppercase, lowercase, number, and special character
+                   </p>
+                 )}
               </div>
 
               {/* Confirm Password Field */}
@@ -295,6 +377,50 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
                 )}
               </div>
 
+              {/* Privacy Policy Checkbox */}
+              <div className="space-y-2">
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="privacyPolicy"
+                    checked={privacyPolicyAccepted}
+                    onChange={(e) => {
+                      setPrivacyPolicyAccepted(e.target.checked)
+                      if (validationErrors.privacyPolicy) {
+                        setValidationErrors(prev => ({ ...prev, privacyPolicy: '' }))
+                      }
+                    }}
+                    className="mt-1 w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                    disabled={isLoading}
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="privacyPolicy" className="text-sm text-gray-700 cursor-pointer">
+                      I agree to the{' '}
+                      <a
+                        href="/privacy-policy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-700 underline"
+                      >
+                        Privacy Policy
+                      </a>
+                      {' '}and{' '}
+                      <a
+                        href="/terms-of-service"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-700 underline"
+                      >
+                        Terms of Service
+                      </a>
+                    </label>
+                    {validationErrors.privacyPolicy && (
+                      <p className="text-xs text-red-500 mt-1">{validationErrors.privacyPolicy}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Error Message */}
               {error && (
                 <motion.div
@@ -310,7 +436,7 @@ export function RegisterModal({ isOpen, onClose, onSwitchToLogin }: RegisterModa
               <Button
                 type="submit"
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
-                disabled={isLoading || !isFormValid}
+                disabled={isLoading || !isFormValid || !privacyPolicyAccepted}
               >
                 {isLoading ? (
                   <>

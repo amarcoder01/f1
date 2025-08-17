@@ -47,8 +47,8 @@ export class YahooFinanceSimple {
       const avgVolume = meta.averageVolume || volume
 
       // Get high/low data
-      const dayHigh = quote.high ? Math.max(...quote.high.filter(h => h !== null)) : currentPrice
-      const dayLow = quote.low ? Math.min(...quote.low.filter(l => l !== null)) : currentPrice
+      const dayHigh = quote.high ? Math.max(...quote.high.filter((h: number | null) => h !== null)) : currentPrice
+      const dayLow = quote.low ? Math.min(...quote.low.filter((l: number | null) => l !== null)) : currentPrice
 
       // Create stock object
       const stock: Stock = {

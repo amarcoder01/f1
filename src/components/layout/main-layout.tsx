@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
@@ -13,6 +13,10 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const { sidebarCollapsed } = useUIStore()
+
+  useEffect(() => {
+    console.log('🔍 MainLayout: Component mounted')
+  }, [])
 
   return (
     <div className="min-h-screen flex bg-background">

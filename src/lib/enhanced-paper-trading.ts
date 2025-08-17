@@ -51,24 +51,24 @@ export class EnhancedPaperTradingService {
 
   // Start real-time data updates
   startRealTimeUpdates(): void {
-    if (this.isRunning) return
+    if (EnhancedPaperTradingService.isRunning) return
     
-    this.isRunning = true
+    EnhancedPaperTradingService.isRunning = true
     console.log('🚀 Starting enhanced paper trading real-time updates...')
     
     // Update every 5 seconds during market hours, 30 seconds after hours
-    this.updateInterval = setInterval(() => {
+    EnhancedPaperTradingService.updateInterval = setInterval(() => {
       this.updateAllPositions()
     }, this.isMarketOpen() ? 5000 : 30000)
   }
 
   // Stop real-time updates
   stopRealTimeUpdates(): void {
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval)
-      this.updateInterval = null
+    if (EnhancedPaperTradingService.updateInterval) {
+      clearInterval(EnhancedPaperTradingService.updateInterval)
+      EnhancedPaperTradingService.updateInterval = null
     }
-    this.isRunning = false
+    EnhancedPaperTradingService.isRunning = false
     console.log('⏹️ Stopped enhanced paper trading updates')
   }
 
@@ -334,7 +334,7 @@ export class EnhancedPaperTradingService {
       })
 
       // Update account and positions
-      await this.updateAccountAfterTrade(order.accountId, order.symbol, order.side, order.quantity, executionPrice, commission)
+      await this.updateAccountAfterTrade(order.accountId, order.symbol, order.side as 'buy' | 'sell', order.quantity, executionPrice, commission)
       
       console.log(`✅ Executed market order: ${order.side} ${order.quantity} ${order.symbol} at $${executionPrice.toFixed(2)}`)
     } catch (error) {
@@ -426,7 +426,7 @@ export class EnhancedPaperTradingService {
       }
 
       // Update account cash
-      await prisma.paperOrder.update({
+      await prisma.paperTradingAccount.update({
         where: { id: accountId },
         data: {
           availableCash: newCash,

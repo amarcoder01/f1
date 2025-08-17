@@ -7,9 +7,10 @@ const openai = new OpenAI({
 })
 
 export async function POST(request: NextRequest) {
+  const body = await request.json()
+  const { symbol, timeframe, chartData, currentPrice, priceChange, query, analysisType } = body
+  
   try {
-    const body = await request.json()
-    const { symbol, timeframe, chartData, currentPrice, priceChange, query, analysisType } = body
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -31,8 +32,8 @@ export async function POST(request: NextRequest) {
       
       Chart Data Summary:
       - Latest Close: $${chartData[chartData.length - 1]?.close || currentPrice}
-      - High: $${Math.max(...chartData.map(d => d.high))}
-      - Low: $${Math.min(...chartData.map(d => d.low))}
+      - High: $${Math.max(...chartData.map((d: any) => d.high))}
+      - Low: $${Math.min(...chartData.map((d: any) => d.low))}
       - Volume Trend: ${chartData[chartData.length - 1]?.volume > chartData[chartData.length - 10]?.volume ? 'Increasing' : 'Decreasing'}
     `
 

@@ -24,10 +24,43 @@ export function middleware(request: NextRequest) {
   response.headers.set('Content-Security-Policy', csp)
 
   // Prevent caching for sensitive routes
-  if (request.nextUrl.pathname.startsWith('/api/auth/')) {
+  if (request.nextUrl.pathname.startsWith('/api/auth/') || 
+      request.nextUrl.pathname.startsWith('/api/user/')) {
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
     response.headers.set('Pragma', 'no-cache')
     response.headers.set('Expires', '0')
+  }
+
+  // Authentication check for protected API routes
+  const protectedRoutes = [
+    '/api/user/',
+    '/api/watchlist/',
+    '/api/paper-trading/',
+    '/api/price-alerts/'
+  ]
+
+  const isProtectedRoute = protectedRoutes.some(route => 
+    request.nextUrl.pathname.startsWith(route)
+  )
+
+  if (isProtectedRoute) {
+    const token = request.cookies.get('token')?.value
+    const refreshToken = request.cookies.get('refreshToken')?.value
+
+    // Allow requests with valid tokens or refresh tokens
+    if (!token && !refreshToken) {
+      // For watchlist routes, allow demo access
+      if (request.nextUrl.pathname.startsWith('/api/watchlist/')) {
+        // Continue with demo user access
+        return response
+      }
+      
+      // For other protected routes, return 401
+      return NextResponse.json(
+        { success: false, message: 'Authentication required' },
+        { status: 401 }
+      )
+    }
   }
 
   return response
@@ -40,7 +73,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - public files
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public).*)',
   ],
 }

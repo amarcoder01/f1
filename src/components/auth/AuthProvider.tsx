@@ -1,4 +1,3 @@
-'use client'
 
 import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store'
@@ -14,8 +13,9 @@ export function AuthProvider() {
   const { user, isAuthenticated, checkAuth } = useAuthStore()
 
   useEffect(() => {
-    // Check authentication status on mount
-    checkAuth()
+    // Skip automatic auth check entirely to prevent interference with modal-based authentication
+    // Let the parent components handle authentication checking when needed
+    console.log('🔐 AuthProvider: Skipping automatic auth check to prevent interference')
   }, [checkAuth])
 
   const handleSwitchToRegister = () => {

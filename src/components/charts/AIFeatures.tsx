@@ -24,8 +24,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Clock,
-  DollarSign,
-  ChartLine
+  DollarSign
 } from 'lucide-react'
 
 interface AIFeature {
@@ -300,7 +299,7 @@ export function AIFeatures() {
               {/* Stats */}
               <div>
                 <h4 className="font-semibold mb-3 flex items-center gap-2">
-                  <ChartLine className="h-4 w-4" />
+                  <TrendingUp className="h-4 w-4" />
                   Performance Stats
                 </h4>
                 <div className="space-y-3">

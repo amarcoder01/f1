@@ -460,30 +460,30 @@ export default function PriceAlertsPage() {
                               <div className="flex items-center justify-between text-sm">
                                 <span className="text-muted-foreground">Current:</span>
                                 <span className={`font-semibold ${
-                                  currentPrices[alert.symbol].currentPrice && 
-                                  currentPrices[alert.symbol].currentPrice > alert.targetPrice 
+                                  currentPrices[alert.symbol]?.currentPrice && 
+                                  currentPrices[alert.symbol]?.currentPrice! > alert.targetPrice 
                                     ? 'text-green-600' 
                                     : 'text-red-600'
                                 }`}>
-                                  ${currentPrices[alert.symbol].currentPrice?.toFixed(2) || 'N/A'}
+                                  ${currentPrices[alert.symbol]?.currentPrice?.toFixed(2) || 'N/A'}
                                 </span>
                               </div>
-                              {currentPrices[alert.symbol].priceChangePercent && (
+                              {currentPrices[alert.symbol]?.priceChangePercent && (
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-muted-foreground">Change:</span>
                                   <span className={`font-medium ${
-                                    currentPrices[alert.symbol].priceChangePercent > 0 
+                                    currentPrices[alert.symbol]?.priceChangePercent! > 0 
                                       ? 'text-green-600' 
                                       : 'text-red-600'
                                   }`}>
-                                    {currentPrices[alert.symbol].priceChangePercent > 0 ? '+' : ''}
-                                    {currentPrices[alert.symbol].priceChangePercent.toFixed(2)}%
+                                    {currentPrices[alert.symbol]?.priceChangePercent! > 0 ? '+' : ''}
+                                    {currentPrices[alert.symbol]?.priceChangePercent?.toFixed(2)}%
                                   </span>
                                 </div>
                               )}
-                              {currentPrices[alert.symbol].lastUpdated && (
+                              {currentPrices[alert.symbol]?.lastUpdated && (
                                 <div className="text-xs text-muted-foreground">
-                                  Updated: {new Date(currentPrices[alert.symbol].lastUpdated).toLocaleTimeString()}
+                                                                      Updated: {currentPrices[alert.symbol]?.lastUpdated ? new Date(currentPrices[alert.symbol]?.lastUpdated!).toLocaleTimeString() : 'N/A'}
                                 </div>
                               )}
                             </div>

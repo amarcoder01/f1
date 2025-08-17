@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PriceTicker } from '@/components/trading/price-ticker'
-import { PolygonConnectionStatus } from '@/components/PolygonConnectionStatus'
 import { searchStocks as multiSourceSearchStocks, getStockData } from '@/lib/multi-source-api'
 import { Stock, WatchlistItem } from '@/types'
 import { useWatchlistStore } from '@/store'
@@ -47,6 +46,8 @@ export default function WatchlistPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoadingPopular, setIsLoadingPopular] = useState(false)
   const [loadingStocks, setLoadingStocks] = useState<Set<string>>(new Set())
+  const [hideInfoMessage, setHideInfoMessage] = useState(false)
+  const [refreshSuccess, setRefreshSuccess] = useState(false)
 
   // Get or create default watchlist
   const defaultWatchlist = watchlists?.find(w => w.name === 'My Watchlist') || {
@@ -62,6 +63,12 @@ export default function WatchlistPage() {
     // Mark as hydrated after component mounts on client
     if (typeof window !== 'undefined') {
       setHydrated(true)
+      
+      // Check if info message should be hidden
+      const hideInfo = localStorage.getItem('hideWatchlistInfo')
+      if (hideInfo === 'true') {
+        setHideInfoMessage(true)
+      }
     }
   }, [setHydrated])
 
@@ -92,10 +99,10 @@ export default function WatchlistPage() {
     }
   }, [defaultWatchlist?.items?.length, storeLoading])
 
-  // Function to validate and fix invalid symbols
+  // Function to validate and fix invalid symbols (without removing)
   const validateAndFixWatchlistSymbols = async () => {
     try {
-      const { updateWatchlistItem, removeFromWatchlist } = useWatchlistStore.getState()
+      const { updateWatchlistItem } = useWatchlistStore.getState()
       
       // Check if defaultWatchlist exists and has items
       if (!defaultWatchlist?.items?.length) {
@@ -140,23 +147,8 @@ export default function WatchlistPage() {
           }
         }
         
-        // Check if current symbol returns valid data
-        try {
-          const response = await fetch(`/api/stocks/quote?symbol=${encodeURIComponent(item.symbol)}`)
-          if (response.ok) {
-            const data = await response.json()
-            if (!data.stock || data.stock.price === 0) {
-              console.warn(`⚠️ Invalid symbol detected: ${item.symbol}`)
-              // Remove invalid symbols that can't be fixed
-              if (!symbolCorrections[item.symbol]) {
-                console.log(`🗑️ Removing invalid symbol: ${item.symbol}`)
-                await removeFromWatchlist(defaultWatchlist?.id || 'default', item.id)
-              }
-            }
-          }
-        } catch (error) {
-          console.error(`Error validating symbol ${item.symbol}:`, error)
-        }
+        // Note: Removed automatic removal logic to prevent stocks from being deleted
+        // Users can manually remove stocks if needed
       }
     } catch (error) {
       console.error('Error validating watchlist symbols:', error)
@@ -228,12 +220,11 @@ export default function WatchlistPage() {
     }
   }, [defaultWatchlist?.items.length, isConnectedToRealTime, startRealTimeUpdates, stopRealTimeUpdates])
 
-  // Enhanced search functionality using simplified API
+  // Enhanced search functionality using yfinance API
   useEffect(() => {
     const searchStocks = async () => {
       if (!searchQuery || searchQuery.length < 1) {
         setSearchResults([])
-        setIsAddingSymbol(false)
         setError(null)
         return
       }
@@ -246,27 +237,36 @@ export default function WatchlistPage() {
       }
 
       setIsSearching(true)
-      setIsAddingSymbol(true)
       setError(null)
       
       try {
         console.log(`🔍 Searching for: "${searchQuery}"`)
         
-        // Use the simplified Next.js API route for search
-        const response = await fetch(`/api/stocks/search?q=${encodeURIComponent(searchQuery)}`)
+        // Use the yfinance API route for real-time data
+        const searchUrl = `/api/stocks/yfinance-search?q=${encodeURIComponent(searchQuery)}`
+        console.log(`📡 Making request to: ${searchUrl}`)
+        
+        const response = await fetch(searchUrl)
+        
+        console.log(`📡 Response status: ${response.status}`)
+        console.log(`📡 Response ok: ${response.ok}`)
         
         if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`❌ API Error Response: ${errorText}`)
           throw new Error(`API request failed: ${response.status} ${response.statusText}`)
         }
         
         const data = await response.json()
+        console.log(`📊 yfinance Search API response:`, data)
+        
         const results = data.results || []
         setSearchResults(results)
         
         if (results.length === 0) {
           setError(`No stocks found for "${searchQuery}". Try searching with a different term.`)
         } else {
-          console.log(`✅ Found ${results.length} stocks for "${searchQuery}"`)
+          console.log(`✅ Found ${results.length} stocks for "${searchQuery}" using real-time data`)
         }
       } catch (error) {
         console.error('❌ Error searching stocks:', error)
@@ -389,6 +389,7 @@ export default function WatchlistPage() {
 
   const refreshWatchlistData = async () => {
     try {
+      console.log('🔄 Refresh button clicked')
       setError(null)
       setIsLoading(true)
       
@@ -396,34 +397,64 @@ export default function WatchlistPage() {
       
       // Check if defaultWatchlist exists and has items
       if (!defaultWatchlist?.items?.length) {
+        console.log('⚠️ No items to refresh')
         setIsLoading(false)
         return
       }
       
-      // Refresh data for all watchlist items using multi-source
-      const refreshPromises = defaultWatchlist?.items?.map(async (item) => {
+      console.log(`🔄 Refreshing data for ${defaultWatchlist.items.length} stocks...`)
+      console.log('📊 Stocks to refresh:', defaultWatchlist.items.map(item => item.symbol))
+      
+      // Refresh data for all watchlist items using yfinance API
+      const refreshPromises = defaultWatchlist.items.map(async (item) => {
         try {
-          const freshData = await getStockData(item.symbol)
+          console.log(`🔍 Refreshing ${item.symbol}...`)
+          
+          // Use yfinance API to get fresh data
+          const response = await fetch(`/api/stocks/yfinance-search?q=${encodeURIComponent(item.symbol)}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            console.log(`📊 API response for ${item.symbol}:`, data)
+            
+            const freshData = data.results?.[0] // Get the first (and should be only) result
+            
           if (freshData && freshData.price > 0) {
             updateWatchlistItem(defaultWatchlist?.id || 'default', item.id, {
               price: freshData.price,
               change: freshData.change,
               changePercent: freshData.changePercent,
-              volume: freshData.volume
+              volume: freshData.volume,
+              marketCap: freshData.marketCap,
+              sector: freshData.sector,
+              industry: freshData.industry
             })
-            console.log(`✅ Refreshed data for ${item.symbol}: $${freshData.price}`)
+              console.log(`✅ Refreshed data for ${item.symbol}: $${freshData.price} (${freshData.changePercent >= 0 ? '+' : ''}${freshData.changePercent.toFixed(2)}%)`)
           } else {
-            console.warn(`⚠️ Could not refresh data for ${item.symbol}`)
+              console.warn(`⚠️ Could not refresh data for ${item.symbol}: No valid data returned`)
+            }
+          } else {
+            console.error(`❌ Failed to refresh ${item.symbol}: API returned ${response.status}`)
           }
         } catch (error) {
-          console.error(`Error refreshing data for ${item.symbol}:`, error)
+          console.error(`❌ Error refreshing data for ${item.symbol}:`, error)
         }
       })
       
       await Promise.all(refreshPromises)
-      console.log('✅ Watchlist data refresh completed via multi-source')
+      console.log('✅ Watchlist data refresh completed via yfinance')
+      
+      // Show success message
+      setError(null)
+      setRefreshSuccess(true)
+      
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setRefreshSuccess(false)
+      }, 3000)
+      
     } catch (error) {
-      console.error('Error refreshing watchlist data:', error)
+      console.error('❌ Error refreshing watchlist data:', error)
       setError('Failed to refresh watchlist data. Please try again.')
     } finally {
       setIsLoading(false)
@@ -471,6 +502,57 @@ export default function WatchlistPage() {
         </div>
       )}
 
+      {/* Success Message */}
+      {refreshSuccess && (
+        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="flex-shrink-0">
+              <div className="w-5 h-5 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <span className="text-green-600 dark:text-green-400 text-xs font-bold">✓</span>
+              </div>
+            </div>
+            <p className="text-green-700 dark:text-green-300 text-sm">
+              <strong>Refresh Complete!</strong> All stock data has been updated with the latest prices.
+            </p>
+            <button 
+              onClick={() => setRefreshSuccess(false)}
+              className="ml-auto text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Info Message */}
+      {defaultWatchlist?.items?.length > 0 && !hideInfoMessage && (
+        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="flex-shrink-0">
+              <div className="w-5 h-5 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 dark:text-blue-400 text-xs font-bold">i</span>
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-blue-700 dark:text-blue-300 text-sm">
+                <strong>Watchlist Management:</strong> Your stocks are now safe and won't be automatically removed. 
+                You can manually remove any stock by clicking the remove button next to it.
+              </p>
+            </div>
+            <button 
+              onClick={() => {
+                // Hide the message by setting a flag in localStorage
+                localStorage.setItem('hideWatchlistInfo', 'true')
+                setHideInfoMessage(true)
+              }}
+              className="ml-auto text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -491,8 +573,6 @@ export default function WatchlistPage() {
             {totalChangePercent >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
             {totalChangePercent.toFixed(2)}%
           </Badge>
-          {/* Enhanced connection status */}
-          <PolygonConnectionStatus showDetails={true} className="text-xs" />
           <Button 
             onClick={refreshWatchlistData}
             disabled={isLoading || !defaultWatchlist?.items?.length}
@@ -506,30 +586,6 @@ export default function WatchlistPage() {
               <RefreshCw className="w-4 h-4" />
             )}
             <span>Refresh</span>
-          </Button>
-          <Button 
-            onClick={async () => {
-              try {
-                console.log('🔍 Testing API endpoints...')
-                const response = await fetch('/api/test-db')
-                const data = await response.json()
-                console.log('📊 Database test result:', data)
-                
-                const debugResponse = await fetch('/api/debug-watchlist')
-                const debugData = await debugResponse.json()
-                console.log('📊 Debug watchlist result:', debugData)
-                
-                alert(`Database: ${data.success ? 'OK' : 'Failed'}\nWatchlist: ${debugData.totalWatchlists} watchlists`)
-              } catch (error) {
-                console.error('❌ Debug test failed:', error)
-                alert('Debug test failed: ' + error)
-              }
-            }}
-            variant="outline"
-            size="sm"
-            className="flex items-center space-x-2"
-          >
-            <span>Debug</span>
           </Button>
           <Button 
             onClick={() => {
@@ -566,7 +622,10 @@ export default function WatchlistPage() {
               type="text"
               placeholder="Search stocks (e.g., AAPL, Apple, Tesla)..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                console.log(`🔍 Search input changed: "${e.target.value}"`)
+                setSearchQuery(e.target.value)
+              }}
               className="w-full pl-10 pr-12 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
             {searchQuery && (
@@ -583,17 +642,14 @@ export default function WatchlistPage() {
               <Loader2 className="absolute right-8 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
             )}
           </div>
-
           
         </div>
 
         {/* Search Results */}
-        {(searchQuery.length > 0 || isAddingSymbol) && (
+        {searchQuery.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center justify-between">
-                {searchQuery.length > 0 ? (
-                  <>
                     Search Results for "{searchQuery}"
                     <div className="flex items-center space-x-2">
                       <span className="text-sm text-muted-foreground font-normal">
@@ -601,21 +657,11 @@ export default function WatchlistPage() {
                       </span>
                       {isSearching && <Loader2 className="w-4 h-4 animate-spin" />}
                     </div>
-                  </>
-                ) : (
-                  <>
-                    Popular Stocks
-                    <span className="text-sm text-muted-foreground font-normal">
-                      Click to search
-                    </span>
-                  </>
-                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {searchQuery.length > 0 ? (
+              {searchResults.length > 0 ? (
                 // Show search results
-                searchResults.length > 0 ? (
                   <div className="space-y-3">
                     {searchResults.map((stock) => (
                       <div key={stock.symbol} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
@@ -708,43 +754,76 @@ export default function WatchlistPage() {
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                     <p className="text-muted-foreground">Searching...</p>
                   </div>
-                )
-              ) : (
-                // Show popular stocks when no search query
-                <div className="space-y-3">
-                  {[
-                    { symbol: 'AAPL', name: 'Apple Inc.' },
-                    { symbol: 'MSFT', name: 'Microsoft Corporation' },
-                    { symbol: 'GOOGL', name: 'Alphabet Inc.' },
-                    { symbol: 'TSLA', name: 'Tesla, Inc.' },
-                    { symbol: 'NVDA', name: 'NVIDIA Corporation' },
-                    { symbol: 'AMZN', name: 'Amazon.com, Inc.' },
-                    { symbol: 'META', name: 'Meta Platforms, Inc.' },
-                    { symbol: 'NFLX', name: 'Netflix, Inc.' }
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Popular Stocks Section */}
+        {searchQuery.length === 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Star className="w-5 h-5 text-yellow-500" />
+                  <span>Popular Stocks</span>
+                </div>
+                <span className="text-sm text-muted-foreground font-normal">
+                  Click to search
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {[
+                  { symbol: 'AAPL', name: 'Apple Inc.', color: 'from-blue-500 to-blue-600' },
+                  { symbol: 'MSFT', name: 'Microsoft', color: 'from-green-500 to-green-600' },
+                  { symbol: 'GOOGL', name: 'Alphabet', color: 'from-red-500 to-red-600' },
+                  { symbol: 'TSLA', name: 'Tesla', color: 'from-purple-500 to-purple-600' },
+                  { symbol: 'NVDA', name: 'NVIDIA', color: 'from-green-600 to-green-700' },
+                  { symbol: 'AMZN', name: 'Amazon', color: 'from-orange-500 to-orange-600' },
+                  { symbol: 'META', name: 'Meta', color: 'from-blue-600 to-blue-700' },
+                  { symbol: 'NFLX', name: 'Netflix', color: 'from-red-600 to-red-700' },
+                  { symbol: 'JPM', name: 'JPMorgan', color: 'from-blue-700 to-blue-800' },
+                  { symbol: 'JNJ', name: 'Johnson & Johnson', color: 'from-red-700 to-red-800' },
+                  { symbol: 'PG', name: 'Procter & Gamble', color: 'from-blue-800 to-blue-900' },
+                  { symbol: 'UNH', name: 'UnitedHealth', color: 'from-green-700 to-green-800' }
                   ].map((stock) => (
-                    <div key={stock.symbol} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                  <button
+                    key={stock.symbol}
+                    onClick={() => setSearchQuery(stock.symbol)}
+                    className="group flex flex-col items-center p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-all duration-200 hover:scale-105"
+                  >
+                    <div className={`w-12 h-12 bg-gradient-to-br ${stock.color} rounded-lg flex items-center justify-center mb-2 group-hover:shadow-lg transition-shadow`}>
                             <span className="text-white font-bold text-sm">{stock.symbol[0]}</span>
                           </div>
-                          <div>
-                            <div className="font-semibold">{stock.symbol}</div>
-                            <div className="text-sm text-muted-foreground">{stock.name}</div>
+                    <div className="text-center">
+                      <div className="font-semibold text-sm group-hover:text-primary transition-colors">
+                        {stock.symbol}
                           </div>
+                      <div className="text-xs text-muted-foreground truncate max-w-[80px]">
+                        {stock.name}
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSearchQuery(stock.symbol)}
-                      >
-                        Search
-                      </Button>
+                  </button>
+                ))}
                     </div>
+              
+              {/* Additional popular stocks in a horizontal scroll */}
+              <div className="mt-4">
+                <div className="text-sm text-muted-foreground mb-2">More Popular Stocks:</div>
+                <div className="flex flex-wrap gap-2">
+                  {['HD', 'MA', 'V', 'PYPL', 'ADBE', 'CRM', 'INTC', 'AMD', 'ORCL', 'CSCO', 'IBM', 'QCOM'].map((symbol) => (
+                    <button
+                      key={symbol}
+                      onClick={() => setSearchQuery(symbol)}
+                      className="px-3 py-1 text-xs bg-muted hover:bg-primary hover:text-primary-foreground rounded-full transition-colors"
+                    >
+                      {symbol}
+                    </button>
                   ))}
                 </div>
-              )}
+              </div>
             </CardContent>
           </Card>
         )}

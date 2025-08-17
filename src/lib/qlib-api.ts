@@ -456,7 +456,7 @@ export class QlibAPI {
   }
 
   // Real-time monitoring
-  async monitorBacktest(experimentId: string, onUpdate?: (data: any) => void): Promise<void> {
+  async monitorBacktest(experimentId: string, onUpdate?: (data: any) => void): Promise<() => void> {
     // This would implement WebSocket connection for real-time backtest monitoring
     // For now, we'll use polling
     const pollInterval = setInterval(async () => {
@@ -481,17 +481,4 @@ export class QlibAPI {
 // Export singleton instance
 export const qlibAPI = new QlibAPI()
 
-// Export types for use in components
-export type {
-  QlibConfig,
-  DataStatus,
-  BacktestParameters,
-  StrategyTemplate,
-  BacktestResult,
-  PerformanceMetrics,
-  BacktestReports,
-  Experiment,
-  DownloadResult,
-  ProcessResult,
-  BackupResult
-}
+// Types are already exported as interfaces above

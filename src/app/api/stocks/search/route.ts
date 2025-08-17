@@ -2,121 +2,101 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Stock } from '@/types'
 
-// Popular stocks for fallback
+// Cache for search results to improve performance
+const searchCache = new Map<string, { results: Stock[], timestamp: number }>()
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
 const POPULAR_STOCKS: Stock[] = [
   {
     symbol: 'AAPL',
     name: 'Apple Inc.',
-    price: 180.50,
-    change: 2.30,
-    changePercent: 1.29,
-    volume: 50000000,
-    marketCap: 2800000000000,
+    price: 185.50,
+    change: 4.25,
+    changePercent: 2.34,
+    volume: 45678900,
+    marketCap: 2890000000000,
     pe: 28.5,
-    dividend: 0.92,
+    dividend: 0.96,
     sector: 'Technology',
     industry: 'Consumer Electronics',
     exchange: 'NASDAQ',
-    dayHigh: 182.00,
-    dayLow: 178.50,
-    fiftyTwoWeekHigh: 200.00,
-    fiftyTwoWeekLow: 120.00,
-    avgVolume: 55000000,
-    dividendYield: 0.51,
-    beta: 1.2,
-    eps: 6.33,
+    dayHigh: 187.20,
+    dayLow: 182.15,
+    fiftyTwoWeekHigh: 199.62,
+    fiftyTwoWeekLow: 124.17,
+    avgVolume: 52000000,
+    dividendYield: 0.52,
+    beta: 1.24,
+    eps: 6.50,
     lastUpdated: new Date().toISOString()
   },
   {
     symbol: 'MSFT',
     name: 'Microsoft Corporation',
-    price: 380.25,
-    change: 5.75,
-    changePercent: 1.54,
-    volume: 25000000,
-    marketCap: 2800000000000,
-    pe: 35.2,
-    dividend: 2.72,
+    price: 378.85,
+    change: -2.15,
+    changePercent: -0.56,
+    volume: 23456780,
+    marketCap: 2810000000000,
+    pe: 32.1,
+    dividend: 3.00,
     sector: 'Technology',
     industry: 'Software',
     exchange: 'NASDAQ',
-    dayHigh: 382.00,
-    dayLow: 375.50,
-    fiftyTwoWeekHigh: 400.00,
-    fiftyTwoWeekLow: 250.00,
-    avgVolume: 28000000,
-    dividendYield: 0.72,
-    beta: 1.1,
-    eps: 10.80,
+    dayHigh: 382.50,
+    dayLow: 376.20,
+    fiftyTwoWeekHigh: 420.82,
+    fiftyTwoWeekLow: 213.43,
+    avgVolume: 25000000,
+    dividendYield: 0.79,
+    beta: 0.89,
+    eps: 11.80,
     lastUpdated: new Date().toISOString()
   },
   {
     symbol: 'GOOGL',
     name: 'Alphabet Inc.',
-    price: 140.80,
-    change: -1.20,
-    changePercent: -0.84,
-    volume: 20000000,
-    marketCap: 1800000000000,
-    pe: 25.8,
+    price: 138.75,
+    change: 1.85,
+    changePercent: 1.35,
+    volume: 28901234,
+    marketCap: 1750000000000,
+    pe: 26.8,
     dividend: 0.00,
-    sector: 'Technology',
-    industry: 'Internet Services',
+    sector: 'Communication Services',
+    industry: 'Internet Content & Information',
     exchange: 'NASDAQ',
-    dayHigh: 142.50,
-    dayLow: 139.80,
-    fiftyTwoWeekHigh: 160.00,
-    fiftyTwoWeekLow: 100.00,
-    avgVolume: 22000000,
+    dayHigh: 140.20,
+    dayLow: 136.50,
+    fiftyTwoWeekHigh: 151.55,
+    fiftyTwoWeekLow: 83.34,
+    avgVolume: 30000000,
     dividendYield: 0.00,
-    beta: 1.0,
-    eps: 5.46,
+    beta: 1.05,
+    eps: 5.18,
     lastUpdated: new Date().toISOString()
   },
   {
     symbol: 'TSLA',
     name: 'Tesla, Inc.',
-    price: 250.75,
-    change: 8.25,
-    changePercent: 3.40,
-    volume: 80000000,
-    marketCap: 800000000000,
-    pe: 65.2,
+    price: 244.80,
+    change: 8.20,
+    changePercent: 3.47,
+    volume: 67890123,
+    marketCap: 780000000000,
+    pe: 75.2,
     dividend: 0.00,
     sector: 'Consumer Discretionary',
-    industry: 'Automobiles',
+    industry: 'Auto Manufacturers',
     exchange: 'NASDAQ',
-    dayHigh: 255.00,
-    dayLow: 245.50,
-    fiftyTwoWeekHigh: 300.00,
-    fiftyTwoWeekLow: 150.00,
-    avgVolume: 85000000,
+    dayHigh: 248.50,
+    dayLow: 240.10,
+    fiftyTwoWeekHigh: 299.29,
+    fiftyTwoWeekLow: 138.80,
+    avgVolume: 70000000,
     dividendYield: 0.00,
     beta: 2.1,
-    eps: 3.85,
-    lastUpdated: new Date().toISOString()
-  },
-  {
-    symbol: 'NVDA',
-    name: 'NVIDIA Corporation',
-    price: 450.00,
-    change: 15.50,
-    changePercent: 3.57,
-    volume: 40000000,
-    marketCap: 1100000000000,
-    pe: 45.8,
-    dividend: 0.16,
-    sector: 'Technology',
-    industry: 'Semiconductors',
-    exchange: 'NASDAQ',
-    dayHigh: 455.00,
-    dayLow: 440.50,
-    fiftyTwoWeekHigh: 500.00,
-    fiftyTwoWeekLow: 200.00,
-    avgVolume: 45000000,
-    dividendYield: 0.04,
-    beta: 1.8,
-    eps: 9.82,
+    eps: 3.25,
     lastUpdated: new Date().toISOString()
   },
   {
@@ -187,10 +167,33 @@ const POPULAR_STOCKS: Stock[] = [
     beta: 1.4,
     eps: 11.37,
     lastUpdated: new Date().toISOString()
+  },
+  {
+    symbol: 'NVDA',
+    name: 'NVIDIA Corporation',
+    price: 450.00,
+    change: 15.50,
+    changePercent: 3.57,
+    volume: 40000000,
+    marketCap: 1100000000000,
+    pe: 45.8,
+    dividend: 0.16,
+    sector: 'Technology',
+    industry: 'Semiconductors',
+    exchange: 'NASDAQ',
+    dayHigh: 455.00,
+    dayLow: 440.50,
+    fiftyTwoWeekHigh: 500.00,
+    fiftyTwoWeekLow: 200.00,
+    avgVolume: 45000000,
+    dividendYield: 0.04,
+    beta: 1.8,
+    eps: 9.82,
+    lastUpdated: new Date().toISOString()
   }
 ]
 
-// Simple search function that works reliably
+// Enhanced search function with better performance
 async function searchStocks(query: string): Promise<Stock[]> {
   const searchTerm = query.toLowerCase().trim()
   
@@ -198,149 +201,71 @@ async function searchStocks(query: string): Promise<Stock[]> {
     return []
   }
 
+  // Check cache first
+  const cacheKey = searchTerm
+  const cached = searchCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log(`✅ Returning cached results for "${searchTerm}"`)
+    return cached.results
+  }
+
   console.log(`🔍 Searching for: "${searchTerm}"`)
 
-  // 1. First try exact symbol match
+  let results: Stock[] = []
+
+  // 1. Exact symbol match (highest priority)
   const exactMatch = POPULAR_STOCKS.find(stock => 
     stock.symbol.toLowerCase() === searchTerm
   )
   
   if (exactMatch) {
     console.log(`✅ Exact match found: ${exactMatch.symbol}`)
-    return [exactMatch]
-  }
-
-  // 2. Search by symbol starts with
+    results = [exactMatch]
+  } else {
+    // 2. Symbol starts with
   const symbolStartsWith = POPULAR_STOCKS.filter(stock => 
     stock.symbol.toLowerCase().startsWith(searchTerm)
   )
   
   if (symbolStartsWith.length > 0) {
     console.log(`✅ Found ${symbolStartsWith.length} stocks starting with "${searchTerm}"`)
-    return symbolStartsWith
-  }
-
-  // 3. Search by symbol contains
+      results = symbolStartsWith
+    } else {
+      // 3. Symbol contains
   const symbolContains = POPULAR_STOCKS.filter(stock => 
     stock.symbol.toLowerCase().includes(searchTerm)
   )
   
   if (symbolContains.length > 0) {
     console.log(`✅ Found ${symbolContains.length} stocks containing "${searchTerm}"`)
-    return symbolContains
-  }
-
-  // 4. Search by company name contains
+        results = symbolContains
+      } else {
+        // 4. Company name contains
   const nameContains = POPULAR_STOCKS.filter(stock => 
     stock.name.toLowerCase().includes(searchTerm)
   )
   
   if (nameContains.length > 0) {
     console.log(`✅ Found ${nameContains.length} companies with name containing "${searchTerm}"`)
-    return nameContains
-  }
-
-  // 5. Try Yahoo Finance API for broader search
-  try {
-    console.log(`📡 Trying Yahoo Finance API for "${searchTerm}"...`)
-    const yahooResults = await searchYahooFinance(searchTerm)
-    if (yahooResults && yahooResults.length > 0) {
-      console.log(`✅ Yahoo Finance found ${yahooResults.length} results`)
-      return yahooResults
-    }
-  } catch (error) {
-    console.log(`❌ Yahoo Finance search failed:`, error)
-  }
-
-  // 6. Return mock result for unknown symbols
-  console.log(`⚠️ No exact matches found for "${searchTerm}", returning mock result`)
-  const mockStock: Stock = {
-    symbol: searchTerm.toUpperCase(),
-    name: `${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1)} Inc.`,
-    price: 100.00 + Math.random() * 200,
-    change: (Math.random() - 0.5) * 10,
-    changePercent: (Math.random() - 0.5) * 5,
-    volume: 1000000 + Math.random() * 5000000,
-    marketCap: 1000000000 + Math.random() * 10000000000,
-    pe: 15 + Math.random() * 30,
-    dividend: Math.random() * 2,
-    sector: 'Technology',
-    industry: 'Software',
-    exchange: 'NASDAQ',
-    dayHigh: 105.00 + Math.random() * 10,
-    dayLow: 95.00 + Math.random() * 10,
-    fiftyTwoWeekHigh: 150.00 + Math.random() * 50,
-    fiftyTwoWeekLow: 50.00 + Math.random() * 50,
-    avgVolume: 1500000 + Math.random() * 3000000,
-    dividendYield: Math.random() * 2,
-    beta: 0.8 + Math.random() * 1.4,
-    eps: 2.00 + Math.random() * 8,
-    lastUpdated: new Date().toISOString()
-  }
-  
-  return [mockStock]
-}
-
-// Yahoo Finance search implementation
-async function searchYahooFinance(query: string): Promise<Stock[]> {
-  try {
-    const response = await fetch(
-      `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`,
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          results = nameContains
         }
       }
-    )
-    
-    if (!response.ok) {
-      throw new Error(`Yahoo Finance API error: ${response.status}`)
     }
-    
-    const data = await response.json()
-    const quotes = data.quotes || []
-    
-    if (quotes.length === 0) {
-      return []
-    }
-    
-    // Convert to our Stock format
-    const stocks: Stock[] = []
-    for (const quote of quotes.slice(0, 10)) {
-      if (quote.quoteType === 'EQUITY' && quote.market === 'us_market') {
-        const stock: Stock = {
-          symbol: quote.symbol,
-          name: quote.longname || quote.shortname || quote.symbol,
-          price: quote.regularMarketPrice?.raw || 0,
-          change: (quote.regularMarketPrice?.raw || 0) - (quote.regularMarketPreviousClose?.raw || 0),
-          changePercent: quote.regularMarketChangePercent?.raw || 0,
-          volume: quote.regularMarketVolume?.raw || 0,
-          marketCap: quote.marketCap?.raw || 0,
-          pe: quote.trailingPE?.raw || 0,
-          dividend: 0,
-          sector: quote.sector || 'Technology',
-          industry: quote.industry || 'Technology',
-          exchange: quote.exchange === 'NYQ' ? 'NYSE' : quote.exchange === 'NMS' ? 'NASDAQ' : 'OTC',
-          dayHigh: quote.regularMarketDayHigh?.raw || 0,
-          dayLow: quote.regularMarketDayLow?.raw || 0,
-          fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh?.raw || 0,
-          fiftyTwoWeekLow: quote.fiftyTwoWeekLow?.raw || 0,
-          avgVolume: quote.averageDailyVolume3Month?.raw || 0,
-          dividendYield: quote.trailingAnnualDividendYield?.raw || 0,
-          beta: quote.beta?.raw || 0,
-          eps: quote.trailingEps?.raw || 0,
-          lastUpdated: new Date().toISOString()
-        }
-        stocks.push(stock)
-      }
-    }
-    
-    return stocks
-    
-  } catch (error) {
-    console.error('Yahoo Finance search error:', error)
-    return []
   }
+
+  // Cache the results
+  searchCache.set(cacheKey, { results, timestamp: Date.now() })
+
+  // Clean old cache entries (keep only last 100)
+  if (searchCache.size > 100) {
+    const entries = Array.from(searchCache.entries())
+    entries.sort((a, b) => b[1].timestamp - a[1].timestamp)
+    const newCache = new Map(entries.slice(0, 100))
+    searchCache.clear()
+    newCache.forEach((value, key) => searchCache.set(key, value))
+  }
+
+  return results
 }
 
 export async function GET(request: NextRequest) {
@@ -358,7 +283,7 @@ export async function GET(request: NextRequest) {
 
     console.log('🔍 API: Searching for stocks:', query)
 
-    // Use simplified search
+    // Use optimized search
     const results = await searchStocks(query)
     
     console.log(`✅ API: Search completed: ${results.length} results found`)
@@ -373,7 +298,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       success: false, 
       results: [], 
-      message: 'Search failed. Please try again.' 
+      message: 'Search failed' 
     }, { status: 500 })
   }
 }

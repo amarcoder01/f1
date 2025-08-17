@@ -426,35 +426,7 @@ export default function AIPredictionsComponent({ className }: AIPredictionsCompo
                           </div>
                         </div>
 
-                        {/* Ensemble Information */}
-                        {result.predictions.nextDay.ensemble_info && (
-                          <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-l-4 border-purple-500">
-                            <div className="flex items-center gap-2 mb-3">
-                              <Brain className="h-5 w-5 text-purple-600" />
-                              <span className="font-semibold text-purple-800">Ensemble AI Analysis</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <div className="text-gray-600 mb-1">Component Models:</div>
-                                <div className="text-gray-800">
-                                  {result.predictions.nextDay.ensemble_info.component_predictions.join(', ')}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-gray-600 mb-1">Signal Score:</div>
-                                <div className="text-gray-800">
-                                  {result.predictions.nextDay.ensemble_info.weighted_signal_score?.toFixed(3) || 'N/A'}
-                                </div>
-                              </div>
-                            </div>
-                            {result.predictions.nextDay.reasoning && (
-                              <div className="mt-3 p-3 bg-white/50 rounded">
-                                <div className="text-gray-600 text-xs mb-1">AI Reasoning:</div>
-                                <div className="text-gray-800 text-sm">{result.predictions.nextDay.reasoning}</div>
-                              </div>
-                            )}
-                          </div>
-                        )}
+
                       </div>
                     )}
 

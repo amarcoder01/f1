@@ -135,6 +135,16 @@ interface PolygonSnapshotResponse {
         v: number   // Volume
         vw: number  // Volume weighted average price
       }
+      lastTrade?: {
+        p: number // Price
+        s: number // Size
+        t: number // Timestamp
+      }
+      lastQuote?: {
+        P: number // Price
+        S: number // Size
+        t: number // Timestamp
+      }
     }
   }>
 }
@@ -641,9 +651,8 @@ export class PolygonStockAPI {
         return cached.data as Stock
       }
 
-      // WebSocket disabled for $29 plan - using REST API only
-
       const ticker = symbol.toUpperCase()
+      console.log(`🔍 Fetching data for ${ticker}...`)
 
       // Get current snapshot data
       const snapshotResponse = await makeAuthenticatedRequest(
@@ -651,12 +660,16 @@ export class PolygonStockAPI {
       )
 
       const snapshotData: PolygonSnapshotResponse = await snapshotResponse.json()
+      console.log(`📊 Snapshot response for ${ticker}:`, JSON.stringify(snapshotData, null, 2))
       
+      // Check if we have valid results
       if (!snapshotData.results || snapshotData.results.length === 0) {
+        console.log(`❌ No snapshot results for ${ticker}`)
         return null
       }
 
       const snapshot = snapshotData.results[0].value
+      console.log(`📈 Snapshot value for ${ticker}:`, JSON.stringify(snapshot, null, 2))
 
       // Get ticker details for company info
       let details: PolygonTickerDetailsResponse['results'] = undefined
@@ -666,15 +679,62 @@ export class PolygonStockAPI {
         )
         const detailsData: PolygonTickerDetailsResponse = await detailsResponse.json()
         details = detailsData.results
+        console.log(`📋 Details for ${ticker}:`, details?.name || 'Unknown')
       } catch (error) {
         console.warn(`Could not fetch details for ${ticker}:`, error)
       }
 
-      // Extract data
-      const currentPrice = snapshot.day?.c || snapshot.prevDay?.c || 0
-      const previousClose = snapshot.prevDay?.c || currentPrice
-      const change = snapshot.todaysChange || (currentPrice - previousClose)
-      const changePercent = snapshot.todaysChangePerc || ((change / previousClose) * 100)
+      // Extract price data - try multiple sources
+      let currentPrice = 0
+      let previousClose = 0
+      let change = 0
+      let changePercent = 0
+
+      // Method 1: Try current day data
+      if (snapshot.day && snapshot.day.c && snapshot.day.c > 0) {
+        currentPrice = snapshot.day.c
+        previousClose = snapshot.prevDay?.c || currentPrice
+        change = snapshot.todaysChange || (currentPrice - previousClose)
+        changePercent = snapshot.todaysChangePerc || ((change / previousClose) * 100)
+        console.log(`📈 Using current day data for ${ticker}: $${currentPrice} (${changePercent.toFixed(2)}%)`)
+      } 
+      // Method 2: Try previous day data
+      else if (snapshot.prevDay && snapshot.prevDay.c && snapshot.prevDay.c > 0) {
+        currentPrice = snapshot.prevDay.c
+        previousClose = snapshot.prevDay.o || currentPrice
+        change = 0 // No change for previous day
+        changePercent = 0
+        console.log(`📊 Using previous day data for ${ticker}: $${currentPrice} (markets closed)`)
+      }
+      // Method 3: Try minute data
+      else if (snapshot.min && snapshot.min.c && snapshot.min.c > 0) {
+        currentPrice = snapshot.min.c
+        previousClose = snapshot.min.o || currentPrice
+        change = currentPrice - previousClose
+        changePercent = previousClose > 0 ? ((change / previousClose) * 100) : 0
+        console.log(`⏰ Using minute data for ${ticker}: $${currentPrice}`)
+      }
+      // Method 4: Try last trade data
+      else if (snapshot.lastTrade && snapshot.lastTrade.p && snapshot.lastTrade.p > 0) {
+        currentPrice = snapshot.lastTrade.p
+        previousClose = snapshot.prevDay?.c || currentPrice
+        change = 0
+        changePercent = 0
+        console.log(`💱 Using last trade data for ${ticker}: $${currentPrice}`)
+      }
+      // Method 5: Try last quote data
+      else if (snapshot.lastQuote && snapshot.lastQuote.P && snapshot.lastQuote.P > 0) {
+        currentPrice = snapshot.lastQuote.P
+        previousClose = snapshot.prevDay?.c || currentPrice
+        change = 0
+        changePercent = 0
+        console.log(`💬 Using last quote data for ${ticker}: $${currentPrice}`)
+      }
+      else {
+        console.warn(`❌ No valid price data found for ${ticker}`)
+        console.log(`🔍 Available data keys:`, Object.keys(snapshot))
+        return null
+      }
 
       // Determine exchange
       let exchange: 'NYSE' | 'NASDAQ' | 'OTC' = 'NASDAQ'
@@ -693,15 +753,15 @@ export class PolygonStockAPI {
         price: currentPrice,
         change: change,
         changePercent: changePercent,
-        volume: snapshot.day?.v || snapshot.prevDay?.v || 0,
+        volume: snapshot.day?.v || snapshot.prevDay?.v || snapshot.min?.v || 0,
         marketCap: details?.market_cap || 0,
         pe: 0, // Not provided by current endpoint
         dividend: 0, // Not provided by current endpoint
         sector: this.getSectorFromSIC(details?.sic_description || ''),
         industry: details?.sic_description || 'Unknown',
         exchange: exchange,
-        dayHigh: snapshot.day?.h || snapshot.prevDay?.h || currentPrice,
-        dayLow: snapshot.day?.l || snapshot.prevDay?.l || currentPrice,
+        dayHigh: snapshot.day?.h || snapshot.prevDay?.h || snapshot.min?.h || currentPrice,
+        dayLow: snapshot.day?.l || snapshot.prevDay?.l || snapshot.min?.l || currentPrice,
         fiftyTwoWeekHigh: 0, // Not provided by current endpoint
         fiftyTwoWeekLow: 0, // Not provided by current endpoint
         avgVolume: snapshot.min?.av || snapshot.day?.v || 0,
@@ -711,13 +771,15 @@ export class PolygonStockAPI {
         lastUpdated: new Date().toISOString()
       }
 
+      console.log(`✅ Successfully created stock object for ${ticker}: $${stock.price}`)
+
       // Cache the result
       PolygonStockAPI.cache.set(symbol, { data: stock, timestamp: Date.now() })
 
       return stock
 
     } catch (error) {
-      console.error(`Error fetching US stock data for ${symbol}:`, error)
+      console.error(`❌ Error fetching US stock data for ${symbol}:`, error)
       return null
     }
   }
@@ -806,6 +868,52 @@ export class PolygonStockAPI {
     }
   }
 
+  // Get market status
+  async getMarketStatus(): Promise<{ isOpen: boolean; nextOpen: string | null; nextClose: string | null }> {
+    try {
+      const response = await makeAuthenticatedRequest(`${POLYGON_BASE_URL}/v1/marketstatus/now`)
+      const data = await response.json()
+      
+      if (data.status === 'OK' && data.results) {
+        const market = data.results
+        return {
+          isOpen: market.market === 'open',
+          nextOpen: market.next_open,
+          nextClose: market.next_close
+        }
+      }
+      
+      // Fallback: assume market is closed during off-hours
+      const now = new Date()
+      const hour = now.getHours()
+      const isWeekend = now.getDay() === 0 || now.getDay() === 6
+      
+      // Market hours: 9:30 AM - 4:00 PM ET, Monday-Friday
+      const isMarketOpen = !isWeekend && hour >= 9 && hour < 16
+      
+      return {
+        isOpen: isMarketOpen,
+        nextOpen: null,
+        nextClose: null
+      }
+      
+    } catch (error) {
+      console.error('Error fetching market status:', error)
+      
+      // Fallback: assume market is closed during off-hours
+      const now = new Date()
+      const hour = now.getHours()
+      const isWeekend = now.getDay() === 0 || now.getDay() === 6
+      const isMarketOpen = !isWeekend && hour >= 9 && hour < 16
+      
+      return {
+        isOpen: isMarketOpen,
+        nextOpen: null,
+        nextClose: null
+      }
+    }
+  }
+
   // Get popular US stocks
   async getPopularUSStocks(): Promise<Stock[]> {
     const popularTickers = [
@@ -819,3 +927,6 @@ export class PolygonStockAPI {
 
 // Export singleton instance
 export const polygonAPI = PolygonStockAPI.getInstance()
+
+// Export helper function for external use
+export { makeAuthenticatedRequest }

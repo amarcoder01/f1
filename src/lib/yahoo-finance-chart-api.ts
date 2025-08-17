@@ -186,7 +186,7 @@ export class YahooFinanceChartAPI {
       const chartPoints = timestamps.map((timestamp: number, index: number) => ({
         x: new Date(timestamp * 1000).toISOString().split('T')[0],
         y: quotes.close[index] || quotes.open[index] || 0
-      })).filter(point => point.y > 0)
+      })).filter((point: { x: string; y: number }) => point.y > 0)
 
       // Generate chart image URL with actual data
       const chartImageUrl = this.generateChartImageURLWithData(options, chartPoints)

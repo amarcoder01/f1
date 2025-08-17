@@ -244,7 +244,7 @@ function getSystemPrompt(messages: AIChatMessage[]): string {
 }
 
 // Simple tool execution without complex tool calling
-async function executeSimpleTool(toolName: string, args: any): Promise<string> {
+async function executeSimpleTool(toolName: string, args: any, sessionId?: string): Promise<string> {
   try {
     switch (toolName) {
       case 'get_stock_quote':
@@ -512,7 +512,7 @@ export async function POST(request: NextRequest) {
             }
 
             const args = JSON.parse(functionCall.arguments)
-            const result = await executeSimpleTool(functionCall.name, args)
+            const result = await executeSimpleTool(functionCall.name, args, sessionId)
 
             toolResults.push({
               toolCallId: toolCall.id,

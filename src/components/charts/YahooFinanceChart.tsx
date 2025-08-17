@@ -501,5 +501,5 @@ export const SimpleYahooFinanceChart = ({ symbol, ...props }: Omit<YahooFinanceC
 )
 
 export const YahooFinanceChartWithIndicators = ({ symbol, indicators = ['sma', 'ema', 'rsi'], ...props }: YahooFinanceChartProps) => (
-  <YahooFinanceChart symbol={symbol} indicators={indicators} showIndicators={true} {...props} />
+  <YahooFinanceChart symbol={symbol} indicators={indicators} {...props} />
 )

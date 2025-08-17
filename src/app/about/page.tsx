@@ -152,7 +152,7 @@ export default function AboutPage() {
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-4">Enterprise Security</h3>
               <p className="text-gray-600">
-                Bank-level security with SOC 2 Type II certification and 256-bit SSL encryption.
+                Enterprise-grade security with SOC 2 Type II certification and 256-bit SSL encryption.
               </p>
             </div>
 

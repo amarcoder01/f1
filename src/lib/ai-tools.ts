@@ -1002,7 +1002,7 @@ export class AIToolsExecutor {
         }
         
         // Normalize probabilities
-        const total = Object.values(prediction.regime_probabilities).reduce((a: number, b: number) => a + b, 0)
+        const total = (Object.values(prediction.regime_probabilities) as number[]).reduce((a: number, b: number) => a + b, 0)
         Object.keys(prediction.regime_probabilities).forEach(key => {
           prediction.regime_probabilities[key] = Math.round((prediction.regime_probabilities[key] / total) * 100) / 100
         })
@@ -1058,7 +1058,7 @@ export class AIToolsExecutor {
         }
         
         // Normalize weights
-        const totalWeight = Object.values(weights).reduce((a: number, b: number) => a + b, 0)
+        const totalWeight = (Object.values(weights) as number[]).reduce((a: number, b: number) => a + b, 0)
         Object.keys(weights).forEach(symbol => {
           weights[symbol] = Math.round((weights[symbol] / totalWeight) * 1000) / 1000
         })
@@ -1308,7 +1308,7 @@ export class AIToolsExecutor {
         }
         
         // Normalize Q-values
-        const totalQ = Object.values(result.recommendation.q_values).reduce((a: number, b: number) => a + b, 0)
+        const totalQ = (Object.values(result.recommendation.q_values) as number[]).reduce((a: number, b: number) => a + b, 0)
         Object.keys(result.recommendation.q_values).forEach(action => {
           result.recommendation.q_values[action] = Math.round((result.recommendation.q_values[action] / totalQ) * 1000) / 1000
         })
@@ -1456,7 +1456,7 @@ export class AIToolsExecutor {
         concentration_risk: concentration_risk.toFixed(3),
         total_risk: Math.min(1.0, concentration_risk + 0.1).toFixed(3),
         risk_tolerance: risk_tolerance || 'moderate',
-        recommendations: []
+        recommendations: [] as string[]
       }
 
       // Generate recommendations
@@ -1524,7 +1524,7 @@ export class AIToolsExecutor {
         risk_tolerance: risk_tolerance || 'moderate',
         optimization_method: 'equal_weight_risk_constrained',
         expected_return: 'To be calculated with current market data',
-        recommendations: []
+        recommendations: [] as string[]
       }
 
       // Generate recommendations

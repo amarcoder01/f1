@@ -291,7 +291,7 @@ export class NewsService {
     const score = (positiveCount - negativeCount) / total
     const confidence = Math.min(total / 10, 1) // Higher confidence with more sentiment words
     
-    let label = 'neutral'
+    let label: 'positive' | 'negative' | 'neutral' = 'neutral'
     if (score > 0.2) label = 'positive'
     else if (score < -0.2) label = 'negative'
     
@@ -328,7 +328,7 @@ export class NewsService {
     const baseScore = baseSentiments[symbol] || 0.5
     const score = baseScore + (Math.random() - 0.5) * 0.4 // Add some randomness
     
-    let label = 'neutral'
+    let label: 'positive' | 'negative' | 'neutral' = 'neutral'
     if (score > 0.6) label = 'positive'
     else if (score < 0.4) label = 'negative'
     
@@ -346,7 +346,7 @@ export class NewsService {
         imageUrl: 'https://via.placeholder.com/400x200/4F46E5/FFFFFF?text=Tech+Rally',
         source: 'Financial Times',
         publishedAt: new Date(Date.now() - Math.random() * 86400000),
-        sentiment: { score: 0.7, label: 'positive', confidence: 0.8 },
+        sentiment: { score: 0.7, label: 'positive' as const, confidence: 0.8 },
         relevance: 0.9,
         category: 'Earnings'
       },
@@ -359,7 +359,7 @@ export class NewsService {
         imageUrl: 'https://via.placeholder.com/400x200/DC2626/FFFFFF?text=Volatility',
         source: 'Bloomberg',
         publishedAt: new Date(Date.now() - Math.random() * 86400000),
-        sentiment: { score: -0.3, label: 'negative', confidence: 0.6 },
+        sentiment: { score: -0.3, label: 'negative' as const, confidence: 0.6 },
         relevance: 0.7,
         category: 'Market'
       }

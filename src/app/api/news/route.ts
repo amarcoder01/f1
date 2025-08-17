@@ -363,14 +363,15 @@ async function fetchTopHeadlines(limit: number = 20, page: number = 1): Promise<
 }
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const category = searchParams.get('category')
+  const sentiment = searchParams.get('sentiment')
+  const limit = parseInt(searchParams.get('limit') || '20')
+  const page = parseInt(searchParams.get('page') || '1')
+  const type = searchParams.get('type') || 'news'
+  const query = searchParams.get('q') || searchParams.get('query')
+  
   try {
-    const { searchParams } = new URL(request.url)
-    const category = searchParams.get('category')
-    const sentiment = searchParams.get('sentiment')
-    const limit = parseInt(searchParams.get('limit') || '20')
-    const page = parseInt(searchParams.get('page') || '1')
-    const type = searchParams.get('type') || 'news'
-    const query = searchParams.get('q') || searchParams.get('query')
 
     console.log('📰 News API request:', { category, sentiment, limit, page, type, query })
 
@@ -395,12 +396,12 @@ export async function GET(request: NextRequest) {
     
     if (query) {
       // Search for specific query
-      newsItems = await fetchNewsFromAPI(query, category, limit, page)
+      newsItems = await fetchNewsFromAPI(query, category || undefined, limit, page)
     } else if (category && category !== 'all') {
       // Search by category
       const categoryKeywords = CATEGORY_KEYWORDS[category as keyof typeof CATEGORY_KEYWORDS] || []
       const searchQuery = categoryKeywords.join(' OR ')
-      newsItems = await fetchNewsFromAPI(searchQuery, category, limit, page)
+      newsItems = await fetchNewsFromAPI(searchQuery, category || undefined, limit, page)
     } else {
       // Get top business headlines for 'all' category or no category specified
       newsItems = await fetchTopHeadlines(limit, page)

@@ -71,7 +71,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
         firstName: userData.firstName.trim(),
         lastName: userData.lastName.trim(),
         isEmailVerified: false,
-        preferences: {
+        preferences: JSON.stringify({
           theme: 'system',
           currency: 'USD',
           timezone: 'UTC',
@@ -80,7 +80,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
             push: true,
             sms: false
           }
-        }
+        })
       }
     })
     

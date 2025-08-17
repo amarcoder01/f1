@@ -169,7 +169,7 @@ export class PriceAlertService {
     } catch (error) {
       console.error(`❌ Error triggering alert ${alert.id}:`, error)
       console.error(`📧 Email address: ${alert.userEmail}`)
-      console.error(`🔍 Error details:`, error.message)
+      console.error(`🔍 Error details:`, error instanceof Error ? error.message : String(error))
       
       // Create history entry for error
       await prisma.priceAlertHistory.create({
@@ -177,7 +177,7 @@ export class PriceAlertService {
           alertId: alert.id,
           action: 'checked',
           price: currentPrice,
-          message: `Error triggering alert: ${error.message}`
+          message: `Error triggering alert: ${error instanceof Error ? error.message : String(error)}`
         }
       })
     }

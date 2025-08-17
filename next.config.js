@@ -17,10 +17,7 @@ const nextConfig = {
   generateEtags: false,
   // Static export settings for Render
   trailingSlash: true,
-  // Environment variables
-  env: {
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
-  },
+  // Environment variables are handled by Next.js automatically
   // Headers for security
   async headers() {
     return [

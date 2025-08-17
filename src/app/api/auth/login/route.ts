@@ -1,36 +1,137 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { AuthService } from '@/lib/auth-service'
-import { AuthError, AuthErrorType } from '@/lib/auth-security'
+import { prisma } from '@/lib/db'
+import { verifyPassword, hashPassword } from '@/lib/auth-security'
+import jwt from 'jsonwebtoken'
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json()
-
-    // Validate input
-    if (!email || !password) {
+    // Parse request body
+    let body
+    try {
+      body = await request.json()
+    } catch (error) {
+      console.error('JSON parsing failed:', error)
       return NextResponse.json(
-        { 
-          message: 'Email and password are required',
-          type: 'VALIDATION_ERROR'
-        },
+        { success: false, error: 'Invalid request format' },
         { status: 400 }
       )
     }
 
-    // Enhanced login with comprehensive security
-    const result = await AuthService.loginUser(email, password, request)
+    const { email, password } = body
 
-    // Set secure HTTP-only cookies
-    const response = NextResponse.json({
-      user: result.user,
-      accessToken: result.accessToken,
-      requiresMFA: result.requiresMFA,
-      suspiciousActivity: result.suspiciousActivity,
-      suspiciousReasons: result.suspiciousReasons
+    // Basic validation
+    if (!email || !password) {
+      return NextResponse.json(
+        { success: false, error: 'Email and password are required' },
+        { status: 400 }
+      )
+    }
+
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() }
     })
 
-    // Set refresh token as HTTP-only cookie
-    response.cookies.set('refreshToken', result.refreshToken, {
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid email or password' },
+        { status: 401 }
+      )
+    }
+
+    // Check if account is disabled
+    if (user.isAccountDisabled) {
+      return NextResponse.json(
+        { success: false, error: 'Account is disabled' },
+        { status: 403 }
+      )
+    }
+
+    // Check if account is locked
+    if (user.isAccountLocked && user.lockoutUntil && user.lockoutUntil > new Date()) {
+      return NextResponse.json(
+        { success: false, error: 'Account is temporarily locked' },
+        { status: 423 }
+      )
+    }
+
+    // Verify password
+    const isValidPassword = await verifyPassword(password, user.password)
+    if (!isValidPassword) {
+      // Update failed login attempts
+      const newFailedAttempts = user.failedLoginAttempts + 1
+      const shouldLockAccount = newFailedAttempts >= 5
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: newFailedAttempts,
+          lockoutUntil: shouldLockAccount ? new Date(Date.now() + 15 * 60 * 1000) : null,
+          isAccountLocked: shouldLockAccount
+        }
+      })
+
+      return NextResponse.json(
+        { success: false, error: 'Invalid email or password' },
+        { status: 401 }
+      )
+    }
+
+    // Reset failed login attempts on successful login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: 0,
+        lockoutUntil: null,
+        isAccountLocked: false,
+        lastLoginAt: new Date()
+      }
+    })
+
+    // Generate JWT token
+    const accessToken = jwt.sign(
+      { userId: user.id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    )
+
+    // Generate refresh token
+    const refreshToken = jwt.sign(
+      { userId: user.id, type: 'refresh' },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    )
+
+    // Create success response
+    const response = NextResponse.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          isEmailVerified: user.isEmailVerified,
+          lastLoginAt: user.lastLoginAt
+        },
+        accessToken,
+        requiresMFA: false,
+        suspiciousActivity: false
+      }
+    })
+
+    // Set cookies
+    response.cookies.set('token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60, // 24 hours
+      path: '/'
+    })
+
+    response.cookies.set('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -42,30 +143,8 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Login error:', error)
-
-    if (error instanceof AuthError) {
-      const response = NextResponse.json(
-        { 
-          message: error.message,
-          type: error.type,
-          details: error.details
-        },
-        { status: error.code }
-      )
-
-      // Add retry-after header for rate limiting
-      if (error.retryAfter) {
-        response.headers.set('Retry-After', error.retryAfter.toString())
-      }
-
-      return response
-    }
-
     return NextResponse.json(
-      { 
-        message: 'An unexpected error occurred during login',
-        type: 'UNKNOWN_ERROR'
-      },
+      { success: false, error: 'An unexpected error occurred' },
       { status: 500 }
     )
   }

@@ -14,12 +14,10 @@ import {
   BarChart3,
   Play,
   Wrench,
-  TrendingUp,
-  Newspaper,
-  Bell
+  TrendingUp
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useUIStore, useNewsStore } from '@/store'
+import { useUIStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { VidalityLogo, VidalityLogoCompact } from '@/components/ui/VidalityLogo'
@@ -33,11 +31,8 @@ interface SidebarItem {
   description?: string
 }
 
-
-
 export function Sidebar() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
-  const { unreadCount } = useNewsStore()
   const router = useRouter()
   const pathname = usePathname()
 
@@ -46,15 +41,15 @@ export function Sidebar() {
       id: 'dashboard',
       label: 'Dashboard',
       icon: Home,
-      href: '/',
+      href: '/dashboard',
       description: 'Overview of your trading activity'
     },
     {
       id: 'market',
-      label: 'Market Explorer',
+      label: 'Market',
       icon: BarChart3,
       href: '/market',
-      description: 'Search stocks and analyze markets'
+      description: 'Real-time US stock market data'
     },
     {
       id: 'watchlist',
@@ -62,21 +57,6 @@ export function Sidebar() {
       icon: Eye,
       href: '/watchlist',
       description: 'Track your favorite assets'
-    },
-    {
-      id: 'news',
-      label: 'Market News',
-      icon: Newspaper,
-      href: '/news',
-      description: 'Real-time news and market insights',
-      badge: unreadCount > 0 ? `${unreadCount}` : 'LIVE'
-    },
-    {
-      id: 'price-alerts',
-      label: 'Price Alerts',
-      icon: Bell,
-      href: '/price-alerts',
-      description: 'Set up price alerts and notifications'
     },
     {
       id: 'paper-trading',

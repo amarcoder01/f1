@@ -75,7 +75,7 @@ export class AuthService {
           isAccountLocked: false,
           isAccountDisabled: false,
           failedLoginAttempts: 0,
-          preferences: {
+          preferences: JSON.stringify({
             theme: 'system',
             currency: 'USD',
             timezone: 'UTC',
@@ -89,7 +89,7 @@ export class AuthService {
               trustedDevices: [],
               lastPasswordChange: new Date().toISOString()
             }
-          }
+          })
         }
       })
 
@@ -673,6 +673,25 @@ export class AuthService {
       })
     } catch (error) {
       console.error('Cleanup expired sessions error:', error)
+    }
+  }
+
+  // Get user from access token
+  static async getUserFromToken(token: string): Promise<User | null> {
+    try {
+      // Verify token
+      const decoded = verifyToken(token, SECURITY_CONFIG.JWT_SECRET)
+      
+      if (!decoded || !decoded.userId) {
+        return null
+      }
+
+      // Get user from database
+      const user = await this.getUserById(decoded.userId)
+      return user
+    } catch (error) {
+      console.error('Error getting user from token:', error)
+      return null
     }
   }
 }

@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { MainLayout } from '@/components/layout/main-layout'
 import '@/lib/startup' // Initialize price alert scheduler
+import { ThemeProvider } from '@/components/theme/ThemeProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -38,9 +38,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <MainLayout>
+        <ThemeProvider>
           {children}
-        </MainLayout>
+        </ThemeProvider>
       </body>
     </html>
   )

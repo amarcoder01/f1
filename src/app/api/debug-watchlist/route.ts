@@ -9,18 +9,15 @@ export async function GET() {
     console.log('🔍 Debug: Checking in-memory watchlist state...')
     
     // Get all watchlists
-    const watchlists = []
-    for (const [id, items] of inMemoryWatchlists.entries()) {
-      watchlists.push({
-        id,
-        itemCount: items.length,
-        items: items.map(item => ({
-          symbol: item.symbol,
-          name: item.name,
-          price: item.price
-        }))
-      })
-    }
+    const watchlists = Array.from(inMemoryWatchlists.entries()).map(([id, items]) => ({
+      id,
+      itemCount: items.length,
+      items: items.map((item: any) => ({
+        symbol: item.symbol,
+        name: item.name,
+        price: item.price
+      }))
+    }))
     
     return NextResponse.json({
       success: true,

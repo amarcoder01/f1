@@ -64,6 +64,7 @@ export interface RegisterCredentials {
   password: string
   firstName: string
   lastName: string
+  privacyPolicyAccepted: boolean
 }
 
 export interface AuthResponse {

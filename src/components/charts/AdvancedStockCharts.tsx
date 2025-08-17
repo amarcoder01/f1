@@ -260,26 +260,26 @@ export function ComparisonChart({ stocks, period }: ComparisonChartProps) {
           {/* Comparison Chart */}
           <div className="relative h-64 bg-gray-50 rounded-lg p-4">
             <svg className="w-full h-full" viewBox="0 0 400 200">
-              {normalizedData.map((stock, stockIndex) => (
+              {normalizedData.filter(stock => stock !== null).map((stock, stockIndex) => (
                 <path
-                  key={stock.symbol}
-                  d={stock.data.map((point, index) => {
-                    const x = (index / (stock.data.length - 1)) * 360 + 20
+                  key={stock?.symbol}
+                  d={stock?.data.map((point, index) => {
+                    const x = (index / (stock?.data.length - 1)) * 360 + 20
                     const y = 180 - ((point.normalizedPrice - 90) / 20) * 160
                     return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
                   }).join(' ')}
-                  stroke={stock.color}
+                  stroke={stock?.color}
                   strokeWidth="2"
                   fill="none"
                 />
               ))}
               
               {/* Legend */}
-              {normalizedData.map((stock, index) => (
-                <g key={stock.symbol}>
-                  <circle cx={20} cy={20 + index * 20} r="4" fill={stock.color} />
+              {normalizedData.filter(stock => stock !== null).map((stock, index) => (
+                <g key={stock?.symbol}>
+                  <circle cx={20} cy={20 + index * 20} r="4" fill={stock?.color} />
                   <text x={30} y={25 + index * 20} fontSize="12" fill="#333">
-                    {stock.symbol}
+                    {stock?.symbol}
                   </text>
                 </g>
               ))}
@@ -288,19 +288,19 @@ export function ComparisonChart({ stocks, period }: ComparisonChartProps) {
 
           {/* Performance Summary */}
           <div className="grid grid-cols-2 gap-4">
-            {normalizedData.map(stock => {
-              const firstPrice = stock.data[0].normalizedPrice
-              const lastPrice = stock.data[stock.data.length - 1].normalizedPrice
+            {normalizedData.filter(stock => stock !== null).map(stock => {
+              const firstPrice = stock?.data[0].normalizedPrice
+              const lastPrice = stock?.data[stock?.data.length - 1].normalizedPrice
               const change = ((lastPrice - firstPrice) / firstPrice) * 100
               
               return (
-                <div key={stock.symbol} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={stock?.symbol} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-2">
                     <div 
                       className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: stock.color }}
+                      style={{ backgroundColor: stock?.color }}
                     />
-                    <span className="font-medium">{stock.symbol}</span>
+                    <span className="font-medium">{stock?.symbol}</span>
                   </div>
                   <Badge variant={change >= 0 ? 'default' : 'destructive'}>
                     {change >= 0 ? '+' : ''}{change.toFixed(2)}%
@@ -417,7 +417,7 @@ export function TechnicalIndicatorsChart({ symbol, data }: TechnicalIndicatorsPr
                 </>
               )}
               
-              {selectedIndicator === 'sma' && (
+              {selectedIndicator === 'sma' && indicators.sma20 && indicators.sma50 && (
                 <>
                   <path
                     d={indicators.sma20.map((point, index) => {
@@ -459,7 +459,7 @@ export function TechnicalIndicatorsChart({ symbol, data }: TechnicalIndicatorsPr
                 </div>
               </div>
             )}
-            {selectedIndicator === 'sma' && (
+            {selectedIndicator === 'sma' && indicators.sma20 && indicators.sma50 && (
               <>
                 <div className="text-center">
                   <div className="font-medium">SMA 20</div>

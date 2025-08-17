@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Extract unique symbols
-    const symbols = [...new Set(activeAlerts.map(alert => alert.symbol))]
+    const symbols = Array.from(new Set(activeAlerts.map(alert => alert.symbol)))
     
     // Get current prices for all symbols
     const currentPrices = await PriceAlertService.getCurrentPrices(symbols)

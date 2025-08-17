@@ -10,6 +10,7 @@ import {
   ExternalLink
 } from 'lucide-react'
 import { VidalityLogo } from '@/components/ui/VidalityLogo'
+import { ContactForm } from '@/components/contact/ContactForm'
 
 export function Footer() {
   const scrollToTop = () => {
@@ -29,112 +30,113 @@ export function Footer() {
       
       <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-16">
         {/* Main Footer Content */}
-        <div className="flex flex-col lg:flex-row justify-between items-start space-y-8 lg:space-y-0 lg:space-x-12">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
           
           {/* Legal Section */}
-          <div className="flex-1 max-w-md">
-            <div className="space-y-6">
-              <div className="flex items-center space-x-3">
-                <div className="bg-gradient-to-r from-red-500 to-red-600 p-2 rounded-lg shadow-lg">
-                  <Shield className="h-5 w-5 text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-white">
-                  Legal Information
-                </h3>
+          <div className="space-y-6">
+            <div className="flex items-center space-x-3">
+              <div className="bg-gradient-to-r from-red-500 to-red-600 p-2 rounded-lg shadow-lg">
+                <Shield className="h-5 w-5 text-white" />
               </div>
+              <h3 className="text-xl font-bold text-white">
+                Legal Information
+              </h3>
+            </div>
+            
+            <p className="text-slate-300 text-sm leading-relaxed">
+              Important legal documents and policies that govern your use of our trading platform.
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Link 
+                href="/terms" 
+                className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50"
+              >
+                <span className="text-sm font-medium">Terms of Service</span>
+                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
               
-              <p className="text-slate-300 text-sm leading-relaxed">
-                Important legal documents and policies that govern your use of our trading platform.
-              </p>
+              <Link 
+                href="/privacy" 
+                className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50"
+              >
+                <span className="text-sm font-medium">Privacy Policy</span>
+                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Link 
-                  href="/terms" 
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50"
-                >
-                  <span className="text-sm font-medium">Terms of Service</span>
-                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-                
-                <Link 
-                  href="/privacy" 
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50"
-                >
-                  <span className="text-sm font-medium">Privacy Policy</span>
-                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-                
-                <Link 
-                  href="/cookies" 
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50"
-                >
-                  <span className="text-sm font-medium">Cookie Policy</span>
-                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-                
-                <Link 
-                  href="/disclaimer" 
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50"
-                >
-                  <span className="text-sm font-medium">Risk Disclosure</span>
-                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-                
-                <Link 
-                  href="/regulatory" 
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50 sm:col-span-2"
-                >
-                  <span className="text-sm font-medium">Regulatory Information</span>
-                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-              </div>
+              <Link 
+                href="/cookies" 
+                className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50"
+              >
+                <span className="text-sm font-medium">Cookie Policy</span>
+                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
+              
+              <Link 
+                href="/disclaimer" 
+                className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50"
+              >
+                <span className="text-sm font-medium">Risk Disclosure</span>
+                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
+              
+              <Link 
+                href="/regulatory" 
+                className="group flex items-center space-x-2 text-slate-300 hover:text-red-400 transition-all duration-300 p-2 rounded-lg hover:bg-slate-800/50 sm:col-span-2"
+              >
+                <span className="text-sm font-medium">Regulatory Information</span>
+                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
             </div>
           </div>
 
           {/* Platform Info */}
-          <div className="flex-1 max-w-md">
-            <div className="space-y-6">
-              <div className="flex items-center space-x-3">
-                <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-2 rounded-lg shadow-lg">
-                  <Shield className="h-5 w-5 text-white" />
+          <div className="space-y-6">
+            <div className="flex items-center space-x-3">
+              <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-2 rounded-lg shadow-lg">
+                <Shield className="h-5 w-5 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-white">
+                Platform Security
+              </h3>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
+                <div className="bg-green-500/20 p-2 rounded-lg">
+                  <CheckCircle className="h-4 w-4 text-green-400" />
                 </div>
-                <h3 className="text-xl font-bold text-white">
-                  Platform Security
-                </h3>
+                <div>
+                  <p className="text-sm font-medium text-white">SSL Secured</p>
+                  <p className="text-xs text-slate-400">256-bit encryption</p>
+                </div>
               </div>
               
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
-                  <div className="bg-green-500/20 p-2 rounded-lg">
-                    <CheckCircle className="h-4 w-4 text-green-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">SSL Secured</p>
-                    <p className="text-xs text-slate-400">256-bit encryption</p>
-                  </div>
+              <div className="flex items-center space-x-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
+                <div className="bg-blue-500/20 p-2 rounded-lg">
+                  <Shield className="h-4 w-4 text-blue-400" />
                 </div>
-                
-                <div className="flex items-center space-x-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
-                  <div className="bg-blue-500/20 p-2 rounded-lg">
-                    <Shield className="h-4 w-4 text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">SOC 2 Compliant</p>
-                    <p className="text-xs text-slate-400">Type II certified</p>
-                  </div>
+                <div>
+                  <p className="text-sm font-medium text-white">SOC 2 Compliant</p>
+                  <p className="text-xs text-slate-400">Type II certified</p>
                 </div>
-                
-                <div className="flex items-center space-x-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
-                  <div className="bg-yellow-500/20 p-2 rounded-lg">
-                    <Lock className="h-4 w-4 text-yellow-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">SEC Registered</p>
-                    <p className="text-xs text-slate-400">Regulated platform</p>
-                  </div>
+              </div>
+              
+              <div className="flex items-center space-x-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
+                <div className="bg-yellow-500/20 p-2 rounded-lg">
+                  <Lock className="h-4 w-4 text-yellow-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">SEC Registered</p>
+                  <p className="text-xs text-slate-400">Regulated platform</p>
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Contact Form */}
+          <div className="lg:col-span-1">
+            <ContactForm />
           </div>
         </div>
 
@@ -154,15 +156,15 @@ export function Footer() {
               </p>
             </div>
 
-                         {/* Version Info */}
-             <div className="text-center lg:text-right">
-               <p className="text-xs text-slate-500">
-                 Platform Version: <span className="text-slate-400 font-mono">v1.0.0</span>
-               </p>
-               <p className="text-xs text-slate-500 mt-1">
-                 Last updated: December 2024
-               </p>
-             </div>
+            {/* Version Info */}
+            <div className="text-center lg:text-right">
+              <p className="text-xs text-slate-500">
+                Platform Version: <span className="text-slate-400 font-mono">v1.0.0</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Last updated: December 2024
+              </p>
+            </div>
           </div>
         </div>
       </div>

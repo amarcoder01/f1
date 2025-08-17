@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
@@ -19,8 +19,17 @@ model User {
   lastLoginAt   DateTime?
   failedLoginAttempts Int @default(0)
   lockoutUntil  DateTime?
-  settings      Json?
-  preferences   Json?     @default("{\"theme\":\"system\",\"currency\":\"USD\",\"timezone\":\"UTC\",\"notifications\":{\"email\":true,\"push\":true,\"sms\":false}}")
+  settings      String?
+  preferences   String?     @default("{\"theme\":\"system\",\"currency\":\"USD\",\"timezone\":\"UTC\",\"notifications\":{\"email\":true,\"push\":true,\"sms\":false}}")
+  
+  // Password reset fields
+  passwordResetToken String?
+  passwordResetExpires DateTime?
+  
+  // Privacy policy agreement
+  privacyPolicyAccepted Boolean @default(false)
+  privacyPolicyAcceptedAt DateTime?
+  
   portfolios    Portfolio[]
   watchlists    Watchlist[]
   chatSessions  ChatSession[]
@@ -29,6 +38,7 @@ model User {
   loginAttempts LoginAttempt[]
   userSessions  UserSession[]
   deviceTrusts  DeviceTrust[]
+  telemetryEvents TelemetryEvent[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -116,19 +126,19 @@ model WatchlistItem {
   watchlistId String
   symbol      String
   name        String
-  type        String
-  price       Float
-  change      Float
-  changePercent Float
+  type        String    @default("stock")
+  price       Float?
+  change      Float?
+  changePercent Float?
   exchange    String?
   sector      String?
   industry    String?
   volume      Float?
   marketCap   Float?
-  lastUpdated DateTime
+  lastUpdated DateTime  @default(now())
   addedAt     DateTime  @default(now())
 
-  watchlist   Watchlist @relation(fields: [watchlistId], references: [id])
+  watchlist   Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
 }
 
 model ChatSession {
@@ -146,18 +156,17 @@ model ChatMessage {
   id          String    @id @default(cuid())
   sessionId   String
   content     String
-  timestamp   DateTime
-  sender      String
+  timestamp   DateTime  @default(now())
+  sender      String    // 'user' or 'assistant'
 
-  session     ChatSession @relation(fields: [sessionId], references: [id])
+  session     ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
-// Paper Trading Models
 model PaperTradingAccount {
   id          String    @id @default(cuid())
   userId      String
   name        String
-  initialBalance Float   @default(100000) // $100,000 starting balance
+  initialBalance Float   @default(100000)
   currentBalance Float   @default(100000)
   availableCash Float    @default(100000)
   totalValue   Float     @default(100000)
@@ -257,4 +266,28 @@ model PriceAlertHistory {
   timestamp   DateTime  @default(now())
 
   alert       PriceAlert @relation(fields: [alertId], references: [id])
+}
+
+// Telemetry Models
+model TelemetryEvent {
+  id          String    @id @default(cuid())
+  sessionId   String
+  userId      String?
+  event       String
+  category    String    // 'user', 'performance', 'security', 'error', 'business'
+  timestamp   DateTime  @default(now())
+  properties  String    @default("{}") // JSON string
+  metadata    String    @default("{}") // JSON string
+  severity    String?   // 'low', 'medium', 'high', 'critical'
+  value       Float?    // For performance metrics
+  unit        String?   // For performance metrics
+  createdAt   DateTime  @default(now())
+
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([category])
+  @@index([timestamp])
+  @@index([event])
 }

@@ -1,36 +1,45 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { 
   Settings, 
+  Save, 
   Palette, 
-  Globe, 
   DollarSign, 
-  Bell,
-  Save,
+  Sun, 
+  Moon, 
   Monitor,
-  Sun,
-  Moon
+  Globe,
+  Clock
 } from 'lucide-react'
-import { useAuthStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select'
+import { useAuthStore, useUIStore } from '@/store'
 
 export function SettingsPage() {
   const { user, updateUser } = useAuthStore()
+  const { theme, setTheme } = useUIStore()
   const [isEditing, setIsEditing] = useState(false)
   const [settings, setSettings] = useState({
-    theme: user?.preferences.theme || 'system',
-    currency: user?.preferences.currency || 'USD',
-    timezone: user?.preferences.timezone || 'UTC',
-    notifications: {
-      email: user?.preferences.notifications.email || true,
-      push: user?.preferences.notifications.push || true,
-      sms: user?.preferences.notifications.sms || false
-    }
+    theme: theme,
+    timezone: user?.preferences?.timezone || 'UTC'
   })
+
+  // Update settings when theme changes from UI store
+  useEffect(() => {
+    setSettings(prev => ({
+      ...prev,
+      theme: theme
+    }))
+  }, [theme])
 
   if (!user) {
     return (
@@ -42,22 +51,30 @@ export function SettingsPage() {
     )
   }
 
+  const handleThemeChange = (newTheme: string) => {
+    // Update both local settings and global UI store
+    setSettings(prev => ({ ...prev, theme: newTheme as 'light' | 'dark' | 'system' }))
+    setTheme(newTheme as 'light' | 'dark' | 'system')
+  }
+
   const handleSave = () => {
+    // Update user preferences
     updateUser({
       preferences: {
-        ...user.preferences,
-        ...settings
+        ...user?.preferences,
+        theme: settings.theme,
+        currency: 'USD', // Always USD
+        timezone: settings.timezone
       }
     })
     setIsEditing(false)
   }
 
   const handleCancel = () => {
+    // Reset to current values
     setSettings({
-      theme: user.preferences.theme,
-      currency: user.preferences.currency,
-      timezone: user.preferences.timezone,
-      notifications: { ...user.preferences.notifications }
+      theme: theme,
+      timezone: user?.preferences?.timezone || 'UTC'
     })
     setIsEditing(false)
   }
@@ -88,7 +105,7 @@ export function SettingsPage() {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-blue-100 rounded-lg">
-                  <Palette className="w-5 h-5 text-blue-600" />
+                  {getThemeIcon(settings.theme)}
                 </div>
                 <h2 className="text-xl font-semibold text-gray-900">Appearance</h2>
               </div>
@@ -100,8 +117,7 @@ export function SettingsPage() {
                 <Label className="text-sm font-medium text-gray-700">Theme</Label>
                 <Select
                   value={settings.theme}
-                  onValueChange={(value) => setSettings({ ...settings, theme: value as any })}
-                  disabled={!isEditing}
+                  onValueChange={handleThemeChange}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -127,6 +143,7 @@ export function SettingsPage() {
                     </SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-gray-500">Theme changes are applied immediately</p>
               </div>
             </div>
           </div>
@@ -146,22 +163,11 @@ export function SettingsPage() {
               {/* Currency Setting */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">Currency</Label>
-                <Select
-                  value={settings.currency}
-                  onValueChange={(value) => setSettings({ ...settings, currency: value })}
-                  disabled={!isEditing}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="USD">USD - US Dollar</SelectItem>
-                    <SelectItem value="EUR">EUR - Euro</SelectItem>
-                    <SelectItem value="GBP">GBP - British Pound</SelectItem>
-                    <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
-                    <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center space-x-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <span className="text-sm font-medium text-gray-900">USD - US Dollar</span>
+                  <span className="text-xs text-gray-500">(Fixed)</span>
+                </div>
+                <p className="text-xs text-gray-500">Currency is fixed to USD for US stock trading</p>
               </div>
 
               {/* Timezone Setting */}
@@ -183,76 +189,6 @@ export function SettingsPage() {
                     <SelectItem value="CET">CET - Central European Time</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* Notification Settings */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Bell className="w-5 h-5 text-purple-600" />
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900">Notifications</h2>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Email Notifications */}
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div>
-                    <h3 className="font-medium text-gray-900">Email Notifications</h3>
-                    <p className="text-sm text-gray-500">Receive updates via email</p>
-                  </div>
-                  <Switch
-                    checked={settings.notifications.email}
-                    onCheckedChange={(checked) => 
-                      setSettings({
-                        ...settings,
-                        notifications: { ...settings.notifications, email: checked }
-                      })
-                    }
-                    disabled={!isEditing}
-                  />
-                </div>
-
-                {/* Push Notifications */}
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div>
-                    <h3 className="font-medium text-gray-900">Push Notifications</h3>
-                    <p className="text-sm text-gray-500">Receive browser notifications</p>
-                  </div>
-                  <Switch
-                    checked={settings.notifications.push}
-                    onCheckedChange={(checked) => 
-                      setSettings({
-                        ...settings,
-                        notifications: { ...settings.notifications, push: checked }
-                      })
-                    }
-                    disabled={!isEditing}
-                  />
-                </div>
-
-                {/* SMS Notifications */}
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div>
-                    <h3 className="font-medium text-gray-900">SMS Notifications</h3>
-                    <p className="text-sm text-gray-500">Receive text messages</p>
-                  </div>
-                  <Switch
-                    checked={settings.notifications.sms}
-                    onCheckedChange={(checked) => 
-                      setSettings({
-                        ...settings,
-                        notifications: { ...settings.notifications, sms: checked }
-                      })
-                    }
-                    disabled={!isEditing}
-                  />
-                </div>
               </div>
             </div>
           </div>

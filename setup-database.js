@@ -38,7 +38,7 @@ async function setupDatabase() {
           firstName: 'Demo',
           lastName: 'User',
           isEmailVerified: true,
-          preferences: {
+          preferences: JSON.stringify({
             theme: 'system',
             currency: 'USD',
             timezone: 'UTC',
@@ -47,7 +47,7 @@ async function setupDatabase() {
               push: true,
               sms: false
             }
-          }
+          })
         }
       })
       console.log('✅ Demo user created')

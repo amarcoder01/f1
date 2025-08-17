@@ -185,45 +185,51 @@ export function MarketAnalysis({ data = defaultMarketData }: MarketAnalysisProps
 }
 
 export function MarketOverview() {
-  const [marketData, setMarketData] = React.useState<MarketData[]>(defaultMarketData)
-  const [loading, setLoading] = React.useState(true)
+  // Using static market data since Market Overview API has been removed
+  const marketData: MarketData[] = defaultMarketData
+  
+  // Simple market status based on current time (ET)
+  const now = new Date()
+  const etTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}))
+  const hour = etTime.getHours()
+  const day = etTime.getDay()
+  const isWeekday = day >= 1 && day <= 5
+  const isMarketHours = hour >= 9 && hour < 16
+  const isOpen = isWeekday && isMarketHours
 
-  React.useEffect(() => {
-    const fetchMarketData = async () => {
-      try {
-        const response = await fetch('/api/market/overview')
-        if (response.ok) {
-          const data = await response.json()
-          if (data.indices) {
-            const formattedData: MarketData[] = data.indices.map((index: any) => ({
-              name: index.name,
-              value: index.price,
-              change: index.change,
-              changePercent: index.changePercent,
-              volume: index.volume ? `${(index.volume / 1e9).toFixed(1)}B` : undefined
-            }))
-            setMarketData(formattedData)
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching market data:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchMarketData()
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+  return (
+    <div className="space-y-4">
+      {/* Market Status Banner */}
+      <div className={`p-4 rounded-lg border ${
+        isOpen 
+          ? 'bg-green-900/20 border-green-500/30 text-green-300' 
+          : 'bg-yellow-900/20 border-yellow-500/30 text-yellow-300'
+      }`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className={`w-3 h-3 rounded-full ${
+              isOpen ? 'bg-green-500' : 'bg-yellow-500'
+            }`}></div>
+            <span className="font-semibold">
+              Market {isOpen ? 'Open' : 'Closed'}
+            </span>
+            <span className="text-sm opacity-75">
+              ({isOpen ? 'REGULAR TRADING' : 'AFTER HOURS'})
+            </span>
+          </div>
+          <div className="text-sm opacity-75">
+            {isOpen ? 'Trading in progress' : 'Market closed'}
+          </div>
+        </div>
+        <div className="mt-2 text-sm opacity-75">
+          Last Updated: {etTime.toLocaleString()} ET • Static Data
+        </div>
       </div>
-    )
-  }
-
-  return <MarketAnalysis data={marketData} />
+      
+      {/* Market Analysis Component */}
+      <MarketAnalysis data={marketData} />
+    </div>
+  )
 }
 
 export function TopGainers() {

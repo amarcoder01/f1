@@ -9,7 +9,7 @@ const prisma = new PrismaClient()
 // Security configuration
 const SECURITY_CONFIG = {
   // Password requirements
-  PASSWORD_MIN_LENGTH: 12,
+  PASSWORD_MIN_LENGTH: 5,
   PASSWORD_REQUIRE_UPPERCASE: true,
   PASSWORD_REQUIRE_LOWERCASE: true,
   PASSWORD_REQUIRE_NUMBERS: true,

@@ -51,7 +51,6 @@ interface MarketPrediction {
   targetPrice: number
   stopLoss: number
   reasoning: string
-  timeframe: string
 }
 
 interface TechnicalInsight {
@@ -270,8 +269,7 @@ export function AIChartAnalysis({
         confidence: 85,
         targetPrice: currentPrice * 1.05,
         stopLoss: currentPrice * 0.95,
-        reasoning: 'Strong technical indicators suggest upward movement.',
-        timeframe: '1 week'
+        reasoning: 'Strong technical indicators suggest upward movement.'
       }
     ])
     setInsights([

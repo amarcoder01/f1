@@ -15,8 +15,10 @@ if (process.env.NODE_ENV === 'development') {
   globalThis.__prisma = prisma
 }
 
-// Database service for watchlist operations
+// Database service for all user data operations
 export class DatabaseService {
+  // ===== WATCHLIST OPERATIONS =====
+  
   // Create a new watchlist for a user
   static async createWatchlist(userId: string, name: string = 'My Watchlist') {
     try {
@@ -203,6 +205,242 @@ export class DatabaseService {
     }
   }
 
+  // ===== USER PREFERENCES AND SETTINGS =====
+
+  // Get user preferences
+  static async getUserPreferences(userId: string) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { preferences: true }
+      })
+      
+      if (!user || !user.preferences) {
+        return this.getDefaultPreferences()
+      }
+      
+      return JSON.parse(user.preferences)
+    } catch (error) {
+      console.error('Error fetching user preferences:', error)
+      return this.getDefaultPreferences()
+    }
+  }
+
+  // Update user preferences
+  static async updateUserPreferences(userId: string, preferences: any) {
+    try {
+      const currentPreferences = await this.getUserPreferences(userId)
+      const updatedPreferences = { ...currentPreferences, ...preferences }
+      
+      await prisma.user.update({
+        where: { id: userId },
+        data: { preferences: JSON.stringify(updatedPreferences) }
+      })
+      
+      return updatedPreferences
+    } catch (error) {
+      console.error('Error updating user preferences:', error)
+      throw error
+    }
+  }
+
+  // Get default preferences
+  static getDefaultPreferences() {
+    return {
+      theme: 'system',
+      currency: 'USD',
+      timezone: 'UTC',
+      notifications: {
+        email: true,
+        push: true,
+        sms: false
+      },
+      security: {
+        mfaEnabled: false,
+        trustedDevices: [],
+        lastPasswordChange: new Date().toISOString()
+      },
+      trading: {
+        defaultOrderType: 'market',
+        defaultQuantity: 100,
+        showConfirmations: true
+      },
+      display: {
+        chartType: 'candlestick',
+        timeFrame: '1D',
+        showVolume: true,
+        showIndicators: true
+      }
+    }
+  }
+
+  // ===== USER DATA STORAGE =====
+
+  // Store recent searches for a user
+  static async storeRecentSearch(userId: string, searchData: {
+    query: string
+    results: any[]
+    timestamp: Date
+  }) {
+    try {
+      const preferences = await this.getUserPreferences(userId)
+      const recentSearches = preferences.recentSearches || []
+      
+      // Remove duplicate if exists
+      const filteredSearches = recentSearches.filter(
+        (search: any) => search.query !== searchData.query
+      )
+      
+      // Add new search at the beginning
+      const updatedSearches = [
+        {
+          query: searchData.query,
+          results: searchData.results.slice(0, 5), // Store only first 5 results
+          timestamp: searchData.timestamp.toISOString()
+        },
+        ...filteredSearches
+      ].slice(0, 10) // Keep only last 10 searches
+      
+      await this.updateUserPreferences(userId, { recentSearches: updatedSearches })
+      return updatedSearches
+    } catch (error) {
+      console.error('Error storing recent search:', error)
+      throw error
+    }
+  }
+
+  // Get recent searches for a user
+  static async getRecentSearches(userId: string) {
+    try {
+      const preferences = await this.getUserPreferences(userId)
+      return preferences.recentSearches || []
+    } catch (error) {
+      console.error('Error fetching recent searches:', error)
+      return []
+    }
+  }
+
+  // Store favorite stocks for a user
+  static async storeFavoriteStocks(userId: string, favorites: any[]) {
+    try {
+      await this.updateUserPreferences(userId, { favoriteStocks: favorites })
+      return favorites
+    } catch (error) {
+      console.error('Error storing favorite stocks:', error)
+      throw error
+    }
+  }
+
+  // Get favorite stocks for a user
+  static async getFavoriteStocks(userId: string) {
+    try {
+      const preferences = await this.getUserPreferences(userId)
+      return preferences.favoriteStocks || []
+    } catch (error) {
+      console.error('Error fetching favorite stocks:', error)
+      return []
+    }
+  }
+
+  // Store portfolio data for a user
+  static async storePortfolioData(userId: string, portfolioData: {
+    positions: any[]
+    transactions: any[]
+    trades: any[]
+  }) {
+    try {
+      await this.updateUserPreferences(userId, { 
+        portfolioData: {
+          ...portfolioData,
+          lastUpdated: new Date().toISOString()
+        }
+      })
+      return portfolioData
+    } catch (error) {
+      console.error('Error storing portfolio data:', error)
+      throw error
+    }
+  }
+
+  // Get portfolio data for a user
+  static async getPortfolioData(userId: string) {
+    try {
+      const preferences = await this.getUserPreferences(userId)
+      return preferences.portfolioData || { positions: [], transactions: [], trades: [] }
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error)
+      return { positions: [], transactions: [], trades: [] }
+    }
+  }
+
+  // Store trading strategies for a user
+  static async storeTradingStrategies(userId: string, strategies: any[]) {
+    try {
+      await this.updateUserPreferences(userId, { tradingStrategies: strategies })
+      return strategies
+    } catch (error) {
+      console.error('Error storing trading strategies:', error)
+      throw error
+    }
+  }
+
+  // Get trading strategies for a user
+  static async getTradingStrategies(userId: string) {
+    try {
+      const preferences = await this.getUserPreferences(userId)
+      return preferences.tradingStrategies || []
+    } catch (error) {
+      console.error('Error fetching trading strategies:', error)
+      return []
+    }
+  }
+
+  // Store stock comparison sessions for a user
+  static async storeStockComparisonSessions(userId: string, sessions: any[]) {
+    try {
+      await this.updateUserPreferences(userId, { stockComparisonSessions: sessions })
+      return sessions
+    } catch (error) {
+      console.error('Error storing stock comparison sessions:', error)
+      throw error
+    }
+  }
+
+  // Get stock comparison sessions for a user
+  static async getStockComparisonSessions(userId: string) {
+    try {
+      const preferences = await this.getUserPreferences(userId)
+      return preferences.stockComparisonSessions || []
+    } catch (error) {
+      console.error('Error fetching stock comparison sessions:', error)
+      return []
+    }
+  }
+
+  // Store market search history for a user
+  static async storeMarketSearchHistory(userId: string, history: any[]) {
+    try {
+      await this.updateUserPreferences(userId, { marketSearchHistory: history })
+      return history
+    } catch (error) {
+      console.error('Error storing market search history:', error)
+      throw error
+    }
+  }
+
+  // Get market search history for a user
+  static async getMarketSearchHistory(userId: string) {
+    try {
+      const preferences = await this.getUserPreferences(userId)
+      return preferences.marketSearchHistory || []
+    } catch (error) {
+      console.error('Error fetching market search history:', error)
+      return []
+    }
+  }
+
+  // ===== UTILITY METHODS =====
+
   // Create or get a default user (for demo purposes)
   static async getOrCreateDemoUser() {
     try {
@@ -214,11 +452,10 @@ export class DatabaseService {
         user = await prisma.user.create({
           data: {
             email: 'demo@vidality.com',
-            name: 'Demo User',
-            settings: {
-              theme: 'dark',
-              notifications: true,
-            },
+            firstName: 'Demo',
+            lastName: 'User',
+            password: 'demo-password-hash',
+            preferences: JSON.stringify(this.getDefaultPreferences()),
           },
         })
       }
@@ -239,6 +476,53 @@ export class DatabaseService {
     } catch (error) {
       console.error('❌ Database connection failed:', error)
       return false
+    }
+  }
+
+  // Migrate localStorage data to database for a user
+  static async migrateLocalStorageData(userId: string, localStorageData: any) {
+    try {
+      const updates: any = {}
+      
+      // Migrate recent searches
+      if (localStorageData.recentSearches) {
+        updates.recentSearches = localStorageData.recentSearches
+      }
+      
+      // Migrate favorite stocks
+      if (localStorageData.favoriteStocks) {
+        updates.favoriteStocks = localStorageData.favoriteStocks
+      }
+      
+      // Migrate portfolio data
+      if (localStorageData.portfolioData) {
+        updates.portfolioData = localStorageData.portfolioData
+      }
+      
+      // Migrate trading strategies
+      if (localStorageData.tradingStrategies) {
+        updates.tradingStrategies = localStorageData.tradingStrategies
+      }
+      
+      // Migrate stock comparison sessions
+      if (localStorageData.stockComparisonSessions) {
+        updates.stockComparisonSessions = localStorageData.stockComparisonSessions
+      }
+      
+      // Migrate market search history
+      if (localStorageData.marketSearchHistory) {
+        updates.marketSearchHistory = localStorageData.marketSearchHistory
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await this.updateUserPreferences(userId, updates)
+        console.log('✅ Successfully migrated localStorage data to database')
+      }
+      
+      return updates
+    } catch (error) {
+      console.error('Error migrating localStorage data:', error)
+      throw error
     }
   }
 }

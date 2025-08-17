@@ -55,7 +55,7 @@ export default function QlibDashboard({ className }: QlibDashboardProps) {
         start_date: startDate,
         end_date: endDate,
         parameters: {
-          initial_capital,
+          initial_capital: initialCapital,
           commission: 0.001,
           slippage: 0.0005,
           position_size: 0.1,
@@ -95,8 +95,8 @@ export default function QlibDashboard({ className }: QlibDashboardProps) {
           experiment_id: `${strategy}_${Date.now()}`,
           strategy_name: strategy,
           symbols: selectedSymbols,
-          start_date,
-          end_date,
+          start_date: startDate,
+          end_date: endDate,
           parameters: qlibAPI.getDefaultParameters(),
           performance: metrics,
           reports: { summary: metrics, charts: {}, trades_analysis: {} }
@@ -159,7 +159,7 @@ export default function QlibDashboard({ className }: QlibDashboardProps) {
               </Badge>
             </CardTitle>
             <CardDescription>
-              {result.start_date} to {result.end_date} • {result.total_trades || 0} trades
+              {result.start_date} to {result.end_date} • {result.performance.total_trades || 0} trades
             </CardDescription>
           </CardHeader>
           <CardContent>
