@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prepare command line arguments
-    const scriptPath = path.join(process.cwd(), 'scripts', 'enhanced_backtesting_cli.py');
+    // Prepare command line arguments for Polygon.io backtesting
+    const scriptPath = path.join(process.cwd(), 'scripts', 'polygon_backtesting_cli.py');
     const args = [
       'backtest',
       '--strategy', strategy_name,
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       '--parameters', JSON.stringify(parameters || {})
     ];
 
-    console.log('Running QLib backtesting with:', { strategy_name, symbols, start_date, end_date, parameters });
+    console.log('Running Polygon.io backtesting with:', { strategy_name, symbols, start_date, end_date, parameters });
 
     // Execute the backtesting script
     const result = await new Promise((resolve, reject) => {
@@ -63,12 +63,13 @@ export async function POST(request: NextRequest) {
                 success: true,
                 data: {
                   success: true,
-                  experiment_id: `backtest_${Date.now()}`,
-                  strategy_name: cliResult.strategy,
+                  experiment_id: cliResult.experiment_id || `polygon_backtest_${Date.now()}`,
+                  strategy_name: cliResult.strategy_name,
                   symbols: cliResult.symbols,
                   start_date: start_date,
                   end_date: end_date,
-                  parameters: parameters || {
+                  data_source: cliResult.data_source || 'Polygon.io (5+ years historical data)',
+                  parameters: cliResult.parameters || {
                     initial_capital: 100000,
                     commission: 0.001,
                     slippage: 0.0005,
@@ -79,26 +80,26 @@ export async function POST(request: NextRequest) {
                     rebalance_frequency: 'daily'
                   },
                   performance: {
-                    total_trades: cliResult.results?.total_trades || 0,
-                    winning_trades: 0, // Calculate from results if available
-                    losing_trades: 0, // Calculate from results if available
-                    win_rate: cliResult.results?.performance?.win_rate || 0,
-                    total_pnl: cliResult.results?.total_pnl || 0,
-                    total_return: cliResult.results?.performance?.total_return || 0,
-                    avg_win: 0, // Calculate from results if available
-                    avg_loss: 0, // Calculate from results if available
-                    profit_factor: cliResult.results?.performance?.profit_factor || 0,
-                    volatility: cliResult.results?.performance?.volatility || 0,
-                    sharpe_ratio: cliResult.results?.performance?.sharpe_ratio || 0,
-                    max_drawdown: cliResult.results?.performance?.max_drawdown || 0,
-                    avg_trade_duration: 0, // Calculate from results if available
-                    final_portfolio_value: 0, // Calculate from results if available
-                    initial_capital: parameters?.initial_capital || 100000
+                    total_trades: cliResult.performance?.total_trades || 0,
+                    winning_trades: cliResult.performance?.winning_trades || 0,
+                    losing_trades: cliResult.performance?.losing_trades || 0,
+                    win_rate: cliResult.performance?.win_rate || 0,
+                    total_pnl: cliResult.performance?.total_pnl || 0,
+                    total_return: cliResult.performance?.total_return || 0,
+                    avg_win: cliResult.performance?.avg_win || 0,
+                    avg_loss: cliResult.performance?.avg_loss || 0,
+                    profit_factor: cliResult.performance?.profit_factor || 0,
+                    volatility: cliResult.performance?.volatility || 0,
+                    sharpe_ratio: cliResult.performance?.sharpe_ratio || 0,
+                    max_drawdown: cliResult.performance?.max_drawdown || 0,
+                    avg_trade_duration: cliResult.performance?.avg_trade_duration || 0,
+                    final_portfolio_value: cliResult.performance?.final_portfolio_value || 0,
+                    initial_capital: cliResult.parameters?.initial_capital || 100000
                   },
                   reports: {
-                    summary: cliResult.results?.performance || {},
-                    charts: cliResult.report?.charts || {},
-                    trades_analysis: {}
+                    summary: cliResult.performance || {},
+                    charts: cliResult.reports?.charts || {},
+                    trades_analysis: cliResult.reports?.trades_analysis || {}
                   }
                 }
               };
@@ -142,8 +143,50 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get('action');
 
     if (action === 'test') {
-      // Test the QLib data reader
-      const scriptPath = path.join(process.cwd(), 'scripts', 'test_qlib_backtesting.py');
+      // Test the Polygon.io data fetching
+      const scriptPath = path.join(process.cwd(), 'scripts', 'polygon_backtesting_cli.py');
+      
+      const result = await new Promise((resolve, reject) => {
+        const child = spawn('python', [scriptPath, 'test-data', '--symbols', 'AAPL,MSFT,GOOGL', '--start-date', '2023-01-01', '--end-date', '2023-12-31'], {
+          cwd: process.cwd(),
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        child.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        child.on('close', (code) => {
+          if (code === 0) {
+            try {
+              const testResult = JSON.parse(stdout);
+              resolve(testResult);
+            } catch (error) {
+              resolve({ success: true, output: stdout });
+            }
+          } else {
+            reject(new Error(`Test failed with code ${code}: ${stderr}`));
+          }
+        });
+
+        child.on('error', (error) => {
+          reject(new Error(`Failed to start test: ${error.message}`));
+        });
+      });
+
+      return NextResponse.json(result);
+    }
+
+    if (action === 'summary') {
+      // Get Polygon.io data summary
+      const scriptPath = path.join(process.cwd(), 'scripts', 'polygon_backtesting_cli.py');
       
       const result = await new Promise((resolve, reject) => {
         const child = spawn('python', [scriptPath], {
@@ -181,9 +224,20 @@ export async function GET(request: NextRequest) {
     // Default: return available strategies and data info
     return NextResponse.json({
       available_strategies: ['momentum', 'mean_reversion'],
-      data_source: 'QLib US Stock Data',
-      supported_symbols: 'All US stocks available in QLib dataset',
-      date_range: '1999-12-31 to 2020-11-10'
+      data_source: 'Polygon.io (5+ years historical data)',
+      supported_symbols: 'All US stocks, ETFs, and more available on Polygon.io',
+      date_range: '2020-08-01 to current date (4+ years)',
+      min_date: '2020-08-01',
+      max_date: new Date().toISOString().split('T')[0],
+      rate_limits: '5 requests per minute (Starter Plan)',
+      data_quality: 'Split and dividend adjusted prices',
+      features: [
+        'Historical daily data',
+        'Split and dividend adjusted prices',
+        'Professional-grade market data',
+        'Comprehensive technical indicators',
+        'Real-time data (with subscription)'
+      ]
     });
 
   } catch (error) {

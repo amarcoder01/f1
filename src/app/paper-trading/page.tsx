@@ -28,7 +28,6 @@ import {
   Star,
   Bell,
   Filter,
-  Search,
   Download,
   Share2,
   MoreHorizontal,
@@ -47,7 +46,6 @@ import { Badge } from '@/components/ui/badge'
 import { PaperTradingAccount, PaperPosition, PaperOrder, PaperTransaction, Stock } from '@/types'
 import { TradingOrderForm } from '@/components/trading/TradingOrderForm'
 import { TradingAnalysis } from '@/components/trading/TradingAnalysis'
-import { EnhancedStockSearch } from '@/components/EnhancedStockSearch'
 
 export default function PaperTradingPage() {
   // State
@@ -61,10 +59,11 @@ export default function PaperTradingPage() {
   const [showOrderForm, setShowOrderForm] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState('')
   const [realTimeData, setRealTimeData] = useState<Map<string, Stock>>(new Map())
-  const [searchQuery, setSearchQuery] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [accountToDelete, setAccountToDelete] = useState<PaperTradingAccount | null>(null)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [validatingSymbol, setValidatingSymbol] = useState(false)
+  const [symbolValidationError, setSymbolValidationError] = useState<string | null>(null)
 
   // Fetch accounts on component mount
   useEffect(() => {
@@ -182,9 +181,35 @@ export default function PaperTradingPage() {
     }
   }
 
+  const validateStockSymbol = async (symbol: string): Promise<boolean> => {
+    if (!symbol.trim()) return false
+    
+    setValidatingSymbol(true)
+    setSymbolValidationError(null)
+    
+    try {
+      const response = await fetch(`/api/stocks/quote?symbol=${encodeURIComponent(symbol.trim())}`)
+      const data = await response.json()
+      
+      if (data.success && data.data) {
+        setValidatingSymbol(false)
+        return true
+      } else {
+        setSymbolValidationError(`Stock symbol "${symbol}" not found. Please enter a valid stock symbol.`)
+        setValidatingSymbol(false)
+        return false
+      }
+    } catch (error) {
+      setSymbolValidationError('Failed to validate stock symbol. Please try again.')
+      setValidatingSymbol(false)
+      return false
+    }
+  }
+
   const handleNewOrder = (symbol?: string) => {
     if (symbol) {
       setSelectedSymbol(symbol)
+      // Don't automatically show the order form - let user validate first
     }
     setShowOrderForm(true)
   }
@@ -192,6 +217,8 @@ export default function PaperTradingPage() {
   const handleOrderPlaced = async () => {
     setShowOrderForm(false)
     setSelectedSymbol('')
+    setSymbolValidationError(null)
+    setValidatingSymbol(false)
     
     // Refresh accounts to get updated data
     try {
@@ -335,23 +362,7 @@ export default function PaperTradingPage() {
         </div>
       </div>
 
-      {/* Global Stock Search */}
-      <div className="mb-6">
-        <div className="max-w-2xl">
-          <label className="text-sm font-medium mb-2 block">Quick Stock Search</label>
-          <EnhancedStockSearch
-            onStockSelect={(stock) => {
-              setSelectedSymbol(stock.symbol)
-              setSearchQuery(stock.symbol)
-              setShowOrderForm(true)
-            }}
-            placeholder="Search for any stock to place an order..."
-            className="w-full"
-            showFilters={true}
-            maxResults={10}
-          />
-        </div>
-      </div>
+
 
       {/* Account Selection */}
       {accounts.length > 0 && (
@@ -587,60 +598,13 @@ export default function PaperTradingPage() {
                   <CardTitle>Current Positions</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {selectedAccount.positions.length === 0 ? (
-                    <div className="text-center py-8">
-                      <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">No Positions</h3>
-                      <p className="text-muted-foreground mb-4">
-                        You don't have any open positions yet.
-                      </p>
-                      <Button onClick={() => handleNewOrder()}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Place Your First Trade
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {selectedAccount.positions.map((position) => {
-                        const realTimePrice = getRealTimePrice(position.symbol)
-                        const realTimeChange = getRealTimeChange(position.symbol)
-                        const currentValue = realTimePrice * position.quantity
-                        const unrealizedPnL = currentValue - (position.averagePrice * position.quantity)
-                        const unrealizedPnLPercent = ((realTimePrice - position.averagePrice) / position.averagePrice) * 100
-
-                        return (
-                          <div key={position.id} className="flex items-center justify-between p-4 border rounded-lg">
-                            <div className="flex items-center space-x-4">
-                              <div>
-                                <h4 className="font-semibold">{position.symbol}</h4>
-                                <p className="text-sm text-muted-foreground">{position.name}</p>
-                                {realTimePrice > 0 && (
-                                  <div className="flex items-center space-x-2 mt-1">
-                                    <span className="text-sm font-medium">{formatCurrency(realTimePrice)}</span>
-                                    <span className={`text-xs ${realTimeChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {formatPercentage(realTimeChange)}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold">{position.quantity} shares</div>
-                              <div className="text-sm text-muted-foreground">
-                                Avg: {formatCurrency(position.averagePrice)}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold">{formatCurrency(currentValue)}</div>
-                              <div className={`text-sm ${unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {formatCurrency(unrealizedPnL)} ({formatPercentage(unrealizedPnLPercent)})
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                  <div className="text-center py-8">
+                    <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Positions Feature Removed</h3>
+                    <p className="text-muted-foreground mb-4">
+                      The positions display has been removed as requested.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -799,23 +763,68 @@ export default function PaperTradingPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {!selectedSymbol && (
-                  <div className="mb-6">
-                    <label className="text-sm font-medium mb-2 block">Search for a stock</label>
-                    <EnhancedStockSearch
-                      onStockSelect={(stock) => {
-                        setSelectedSymbol(stock.symbol)
-                        setSearchQuery(stock.symbol)
+                <div className="mb-6">
+                  <label className="text-sm font-medium mb-2 block">Enter Stock Symbol</label>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="e.g., AAPL, MSFT, GOOGL"
+                      className="w-full p-2 border rounded-md"
+                      value={selectedSymbol}
+                      onChange={(e) => {
+                        setSelectedSymbol(e.target.value.toUpperCase())
+                        setSymbolValidationError(null)
                       }}
-                      placeholder="Search stocks, ETFs, or companies..."
-                      className="w-full"
-                      showFilters={true}
-                      maxResults={8}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          validateStockSymbol(selectedSymbol).then((isValid) => {
+                            if (isValid) {
+                              // Symbol is valid, the TradingOrderForm will show automatically
+                            }
+                          })
+                        }
+                      }}
                     />
+                    {validatingSymbol && (
+                      <div className="flex items-center space-x-2 text-sm text-blue-600">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span>Validating stock symbol...</span>
+                      </div>
+                    )}
+                    {symbolValidationError && (
+                      <div className="text-sm text-red-600 bg-red-50 p-2 rounded-md">
+                        {symbolValidationError}
+                      </div>
+                    )}
+                    <div className="flex space-x-2">
+                      <Button
+                        onClick={async () => {
+                          const isValid = await validateStockSymbol(selectedSymbol)
+                          if (isValid) {
+                            // Symbol is valid, the TradingOrderForm will show automatically
+                          }
+                        }}
+                        disabled={!selectedSymbol.trim() || validatingSymbol}
+                        className="flex-1"
+                      >
+                        {validatingSymbol ? 'Validating...' : 'Validate Symbol'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedSymbol('')
+                          setSymbolValidationError(null)
+                        }}
+                        disabled={validatingSymbol}
+                      >
+                        Clear
+                      </Button>
+                    </div>
                   </div>
-                )}
+                </div>
                 
-                {selectedSymbol && (
+                {selectedSymbol && !symbolValidationError && !validatingSymbol && (
                   <TradingOrderForm
                     symbol={selectedSymbol}
                     accountId={selectedAccount?.id}

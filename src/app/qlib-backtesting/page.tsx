@@ -25,15 +25,41 @@ interface BacktestResult {
   error?: string;
 }
 
-export default function QLibBacktestingPage() {
+export default function PolygonBacktestingPage() {
   const [strategy, setStrategy] = useState('momentum');
   const [symbols, setSymbols] = useState('AAPL,MSFT,GOOGL');
-  const [startDate, setStartDate] = useState('2019-01-01');
+  const [startDate, setStartDate] = useState('2021-01-01');
   const [endDate, setEndDate] = useState('2024-12-31');
   const [parameters, setParameters] = useState('{"initial_capital": 100000, "position_size": 0.1, "commission": 0.001}');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [testOutput, setTestOutput] = useState<string>('');
+
+  const validateDateRange = () => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const minDate = new Date('2020-08-01'); // Polygon.io Starter Plan data starts from August 2020
+    const maxDate = new Date();
+    
+    if (start < minDate) {
+      return `Start date cannot be before 2020-08-01. Available data range: 2020-08-01 to current date.`;
+    }
+    
+    if (end > maxDate) {
+      return `End date cannot be in the future. Available data range: 2020-08-01 to current date.`;
+    }
+    
+    if (start >= end) {
+      return `End date must be after start date.`;
+    }
+    
+    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysDiff < 30) {
+      return `Date range must be at least 30 days for meaningful backtesting.`;
+    }
+    
+    return null; // No error
+  };
 
   const runBacktest = async () => {
     console.log('🚀 runBacktest function called');
@@ -41,6 +67,17 @@ export default function QLibBacktestingPage() {
     setResult(null);
 
     try {
+      // Validate date range
+      const dateError = validateDateRange();
+      if (dateError) {
+        setResult({
+          success: false,
+          error: dateError
+        });
+        setLoading(false);
+        return;
+      }
+
       // Validate and parse parameters
       let parsedParameters;
       try {
@@ -172,7 +209,7 @@ export default function QLibBacktestingPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center space-x-2">
         <BarChart3 className="h-8 w-8 text-blue-600" />
-        <h1 className="text-3xl font-bold">QLib Backtesting</h1>
+        <h1 className="text-3xl font-bold">Polygon.io Backtesting</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -184,7 +221,7 @@ export default function QLibBacktestingPage() {
               <span>Backtest Configuration</span>
             </CardTitle>
             <CardDescription>
-              Configure your backtesting parameters using QLib US stock data
+              Configure your backtesting parameters using Polygon.io 5+ years of historical data
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -219,9 +256,11 @@ export default function QLibBacktestingPage() {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
+                  min="2020-08-01"
+                  max={new Date().toISOString().split('T')[0]}
                 />
                 <p className="text-xs text-gray-500">
-                  Available: Up to 5+ years of historical data
+                  Available: 2020-08-01 to current date (4+ years)
                 </p>
               </div>
               <div className="space-y-2">
@@ -231,9 +270,11 @@ export default function QLibBacktestingPage() {
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
+                  min="2020-08-01"
+                  max={new Date().toISOString().split('T')[0]}
                 />
                 <p className="text-xs text-gray-500">
-                  Current date or any historical date
+                  Must be after start date, up to current date
                 </p>
               </div>
             </div>
@@ -392,7 +433,7 @@ export default function QLibBacktestingPage() {
           <CardHeader>
             <CardTitle>Test Output</CardTitle>
             <CardDescription>
-              QLib data reader and backtesting system test results
+              Polygon.io data fetching and backtesting system test results
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -406,31 +447,33 @@ export default function QLibBacktestingPage() {
       {/* Information Panel */}
       <Card>
         <CardHeader>
-          <CardTitle>QLib Data Information</CardTitle>
+          <CardTitle>Polygon.io Data Information</CardTitle>
           <CardDescription>
-            Information about the QLib US stock dataset
+            Information about the Polygon.io historical data
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <div className="text-lg font-semibold text-blue-600">8,995+</div>
-              <div className="text-sm text-gray-600">US Stocks</div>
+              <div className="text-lg font-semibold text-blue-600">All US Stocks</div>
+              <div className="text-sm text-gray-600">+ ETFs & More</div>
             </div>
             <div className="text-center p-3 bg-green-50 rounded-lg">
-              <div className="text-lg font-semibold text-green-600">20+ Years</div>
+              <div className="text-lg font-semibold text-green-600">2020-Present</div>
               <div className="text-sm text-gray-600">Historical Data</div>
             </div>
             <div className="text-center p-3 bg-purple-50 rounded-lg">
-              <div className="text-lg font-semibold text-purple-600">OHLCV</div>
+              <div className="text-lg font-semibold text-purple-600">Adjusted OHLCV</div>
               <div className="text-sm text-gray-600">Data Format</div>
             </div>
           </div>
-          <div className="mt-4 text-sm text-gray-600">
-            <p><strong>Data Source:</strong> QLib US stock dataset with daily OHLCV data from 1999 to 2020</p>
-            <p><strong>Available Strategies:</strong> Momentum, Mean Reversion, and more</p>
-            <p><strong>Features:</strong> Professional-grade backtesting with risk management and performance analytics</p>
-          </div>
+                      <div className="mt-4 text-sm text-gray-600">
+              <p><strong>Data Source:</strong> Polygon.io with split and dividend adjusted daily OHLCV data</p>
+              <p><strong>Date Range:</strong> 2020-08-01 to current date (4+ years of data)</p>
+              <p><strong>Available Strategies:</strong> Momentum, Mean Reversion strategies</p>
+              <p><strong>Features:</strong> Professional-grade backtesting with real-time data and comprehensive analytics</p>
+              <p><strong>Rate Limits:</strong> 5 requests per minute (Starter Plan)</p>
+            </div>
         </CardContent>
       </Card>
     </div>

@@ -81,6 +81,7 @@ export async function DELETE(
     const symbol = searchParams.get('symbol')
     
     if (!symbol) {
+      console.error('❌ API: Missing symbol parameter in DELETE request')
       return NextResponse.json(
         { success: false, message: 'Symbol parameter is required' },
         { status: 400 }
@@ -101,26 +102,31 @@ export async function DELETE(
       user = await DatabaseService.getOrCreateDemoUser()
     }
 
+    console.log(`👤 API: User authenticated: ${user.id}`)
+
     // Verify watchlist exists and belongs to user
     const watchlist = await DatabaseService.getWatchlist(params.id)
     if (!watchlist || watchlist.userId !== user.id) {
+      console.error(`❌ API: Watchlist ${params.id} not found or access denied for user ${user.id}`)
       return NextResponse.json(
         { success: false, message: 'Watchlist not found or access denied' },
         { status: 404 }
       )
     }
 
+    console.log(`✅ API: Watchlist ${params.id} verified for user ${user.id}`)
+
     await DatabaseService.removeFromWatchlist(params.id, symbol)
-    console.log(`✅ Database: Successfully removed ${symbol} from watchlist ${params.id}`)
+    console.log(`✅ API: Successfully removed ${symbol} from watchlist ${params.id}`)
     
     return NextResponse.json({
       success: true,
       message: 'Item removed from watchlist successfully'
     })
   } catch (error) {
-    console.error('❌ Error removing item from watchlist:', error)
+    console.error('❌ API: Error removing item from watchlist:', error)
     return NextResponse.json(
-      { success: false, message: 'Failed to remove item from watchlist' },
+      { success: false, message: error instanceof Error ? error.message : 'Failed to remove item from watchlist' },
       { status: 500 }
     )
   }

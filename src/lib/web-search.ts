@@ -5,13 +5,18 @@ export class WebSearch {
   private baseUrl: string
 
   constructor() {
-    this.apiKey = process.env.GOOGLE_SEARCH_API_KEY || 'AIzaSyDciNcGWU7jUR2Q15AaewWHDOg6xIV5N6s'
-    this.searchEngineId = process.env.GOOGLE_SEARCH_ENGINE_ID || 'c705ad63b87024063'
+    this.apiKey = process.env.GOOGLE_SEARCH_API_KEY || ''
+    this.searchEngineId = process.env.GOOGLE_SEARCH_ENGINE_ID || ''
     this.baseUrl = 'https://www.googleapis.com/customsearch/v1'
   }
 
   async searchWeb(query: string, numResults: number = 5): Promise<WebSearchResult[]> {
     try {
+      if (!this.apiKey || !this.searchEngineId) {
+        console.log('⚠️ Web search API credentials not configured')
+        return []
+      }
+      
       console.log(`🔍 Web searching for: "${query}"`)
       
       const url = `${this.baseUrl}?key=${this.apiKey}&cx=${this.searchEngineId}&q=${encodeURIComponent(query)}&num=${numResults}`

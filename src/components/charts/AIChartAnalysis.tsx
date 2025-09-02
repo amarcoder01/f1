@@ -295,34 +295,70 @@ export function AIChartAnalysis({
     if (!userQuery.trim()) return
 
     setIsGeneratingResponse(true)
+    setAiResponse('') // Clear previous response
     
     try {
+      console.log('🔍 AI Chat: Sending request to API...', {
+        symbol,
+        timeframe,
+        query: userQuery,
+        dataPoints: chartData.length
+      })
+
       const response = await fetch('/api/ai/analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          symbol,
-          timeframe,
-          chartData,
-          currentPrice,
-          priceChange,
-          query: userQuery,
-          analysisType: 'chat'
+          type: 'chart', // API expects 'type' field
+          data: {
+            symbol,
+            timeframe,
+            chartData: chartData.slice(-50), // Send last 50 data points to avoid payload issues
+            currentPrice,
+            priceChange,
+            query: userQuery
+          },
+          prompt: userQuery // API expects 'prompt' field
         })
       })
 
+      console.log('🔍 AI Chat: Response status:', response.status)
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
       const data = await response.json()
+      console.log('🔍 AI Chat: API response:', data)
       
-      if (data.success && data.data.response) {
-        setAiResponse(data.data.response)
+      if (data.success && data.analysis) {
+        setAiResponse(data.analysis)
       } else {
+        console.warn('🔍 AI Chat: API returned success=false or no analysis:', data)
         // Fallback response
         setAiResponse(`Based on the current chart analysis for ${symbol}, I can see several key patterns. The price action shows momentum with technical indicators suggesting potential opportunities. Please consult with a financial advisor for specific trading decisions.`)
       }
     } catch (error) {
-      console.error('AI Chat Error:', error)
-      // Fallback response
-      setAiResponse(`I'm analyzing the ${symbol} chart on ${timeframe} timeframe. The current price is $${currentPrice} with a ${priceChange}% change. Technical analysis suggests monitoring for clear signals before making trading decisions.`)
+      console.error('🔍 AI Chat Error:', error)
+      
+      // More specific error messages
+      let errorMessage = 'I encountered an error while analyzing the chart.'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('401') || error.message.includes('403')) {
+          errorMessage = 'Authentication error. Please check your OpenAI API key configuration.'
+        } else if (error.message.includes('429')) {
+          errorMessage = 'Rate limit exceeded. Please try again in a moment.'
+        } else if (error.message.includes('500')) {
+          errorMessage = 'Server error. Please try again later.'
+        } else if (error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection.'
+        } else {
+          errorMessage = `Error: ${error.message}`
+        }
+      }
+      
+      setAiResponse(errorMessage)
     } finally {
       setIsGeneratingResponse(false)
     }

@@ -1,260 +1,263 @@
 import { Metadata } from 'next'
-import { Shield, AlertTriangle, FileText, Users, Lock } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Terms of Service - Vidality Trading Platform',
-  description: 'Terms of Service for Vidality, the professional trading platform. Read our terms and conditions for using our services.',
+  description: 'Terms of Service governing access to and use of the Vidality Trading Platform.',
+  keywords: 'terms of service, trading platform, legal, conditions, vidality, australia',
 }
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="text-center">
-            <div className="flex justify-center mb-4">
-              <div className="bg-blue-100 p-3 rounded-full">
-                <FileText className="h-8 w-8 text-blue-600" />
-              </div>
-            </div>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Terms of Service
-            </h1>
-            <p className="text-lg text-gray-600">
-              Last updated: December 2024
-            </p>
-          </div>
-        </div>
-      </div>
+    <div dangerouslySetInnerHTML={{
+      __html: `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Terms of Service | Vidality</title>
+          <meta name="description" content="Terms of Service governing access to and use of the Vidality Trading Platform." />
+          <style>
+            :root {
+              --maxw: 820px;
+              --fg: #0f172a;      /* slate-900 */
+              --muted: #475569;   /* slate-600 */
+              --border: #e2e8f0;  /* slate-200 */
+              --accent: #0ea5e9;  /* sky-500 */
+            }
+            html, body { margin:0; padding:0; }
+            body {
+              font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+              color: var(--fg);
+              line-height: 1.6;
+              background: #fff;
+            }
+            .container {
+              max-width: var(--maxw);
+              margin: 40px auto;
+              padding: 0 20px 80px;
+            }
+            header { margin-bottom: 24px; }
+            h1 {
+              font-size: clamp(28px, 4vw, 36px);
+              line-height: 1.2;
+              margin: 0 0 6px;
+            }
+            .meta {
+              font-size: 14px;
+              color: var(--muted);
+            }
+            nav.toc {
+              border: 1px solid var(--border);
+              border-radius: 12px;
+              padding: 16px;
+              background: #fafafa;
+              margin: 24px 0 32px;
+            }
+            nav.toc strong { display:block; margin-bottom: 8px; }
+            nav.toc a {
+              color: var(--accent);
+              text-decoration: none;
+            }
+            nav.toc a:hover { text-decoration: underline; }
+            section { margin: 28px 0; }
+            h2 {
+              font-size: clamp(20px, 3vw, 24px);
+              margin: 0 0 8px;
+              line-height: 1.3;
+            }
+            h3 { margin: 16px 0 6px; font-size: 17px; }
+            p { margin: 10px 0; }
+            ol { padding-left: 20px; }
+            ul { padding-left: 20px; }
+            hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
+            .note { color: var(--muted); font-size: 14px; }
+            footer.page-end {
+              border-top: 1px solid var(--border);
+              margin-top: 40px;
+              padding-top: 16px;
+              font-size: 14px;
+              color: var(--muted);
+            }
+            a { color: var(--accent); }
+          </style>
+        </head>
+        <body>
+          <main class="container" role="main">
+            <header>
+              <h1>Terms of Service</h1>
+              <div class="meta">Effective Date: August 31, 2025</div>
+            </header>
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="bg-white rounded-lg shadow-sm p-8 space-y-8">
-          
-          {/* Introduction */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-              <Shield className="h-6 w-6 mr-2 text-blue-600" />
-              1. Introduction
-            </h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                Welcome to Vidality ("we," "our," or "us"). These Terms of Service ("Terms") govern your use of our 
-                trading platform, website, and services (collectively, the "Service").
-              </p>
-              <p>
-                By accessing or using our Service, you agree to be bound by these Terms. If you disagree with any part 
-                of these terms, then you may not access the Service.
-              </p>
-            </div>
+            <!-- Table of Contents -->
+            <nav class="toc" aria-label="Table of contents">
+              <strong>Contents</strong>
+              <ol>
+                <li><a href="#scope-of-service">Scope of Service</a></li>
+                <li><a href="#eligibility">Eligibility</a></li>
+                <li><a href="#user-obligations">User Obligations</a></li>
+                <li><a href="#accounts-security">Accounts &amp; Security</a></li>
+                <li><a href="#ai-bot-tools">AI Bot &amp; Automated Tools</a></li>
+                <li><a href="#ai-paper-disclaimer">AI &amp; Paper Trading Disclaimer</a></li>
+                <li><a href="#intellectual-property">Intellectual Property</a></li>
+                <li><a href="#compliance-regulatory">Compliance &amp; Regulatory Status</a></li>
+                <li><a href="#payments-subscriptions">Payments &amp; Subscriptions</a></li>
+                <li><a href="#limitation-liability">Limitation of Liability</a></li>
+                <li><a href="#indemnification">Indemnification</a></li>
+                <li><a href="#suspension-termination">Suspension &amp; Termination</a></li>
+                <li><a href="#governing-law-disputes">Governing Law &amp; Dispute Resolution</a></li>
+                <li><a href="#modifications">Modifications</a></li>
+                <li><a href="#contact">Contact Information</a></li>
+              </ol>
+            </nav>
+
+            <section id="intro">
+              <p>These Terms of Service ("Terms") govern access to and use of the Vidality Trading Platform ("Vidality" or the "Platform"). By accessing or using the Platform, you agree to be bound by these Terms and all applicable laws and regulations.</p>
+            </section>
+
+            <hr />
+
+            <section id="scope-of-service" aria-labelledby="h-scope">
+              <h2 id="h-scope">1. Scope of Service</h2>
+              <ol>
+                <li>The Platform provides AI-powered market insights, simulated paper trading environments, and related tools designed for educational and informational purposes only.</li>
+                <li>The Platform does <strong>not</strong> facilitate or execute real-money transactions, securities trading, or investment brokerage.</li>
+              </ol>
           </section>
 
-          {/* Definitions */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">2. Definitions</h2>
-            <div className="text-gray-700 space-y-4">
-              <ul className="list-disc pl-6 space-y-2">
-                <li><strong>"Service"</strong> refers to the Vidality trading platform, website, and all related services.</li>
-                <li><strong>"User," "you," and "your"</strong> refers to you, as the user of the Service.</li>
-                <li><strong>"Account"</strong> means the account you create to access our Service.</li>
-                <li><strong>"Content"</strong> refers to text, images, or other information that can be posted, uploaded, linked to or otherwise made available via the Service.</li>
+            <section id="eligibility" aria-labelledby="h-eligibility">
+              <h2 id="h-eligibility">2. Eligibility</h2>
+              <ol>
+                <li>Users must be at least 18 years of age and legally permitted to enter into binding agreements under applicable law.</li>
+                <li>Use of the Platform may be restricted in jurisdictions where AI-powered trading simulations or related activities are prohibited.</li>
+              </ol>
+          </section>
+
+            <section id="user-obligations" aria-labelledby="h-obligations">
+              <h2 id="h-obligations">3. User Obligations</h2>
+              <ol>
+                <li>Provide accurate information when creating accounts and maintain the confidentiality of login credentials.</li>
+                <li>Do not misuse the Platform, including (without limitation):
+                  <ul>
+                    <li>Reverse engineering, unauthorized scraping, or tampering with system functionality;</li>
+                    <li>Using the Platform for unlawful, deceptive, or misleading purposes.</li>
+                  </ul>
+                  </li>
+              </ol>
+          </section>
+
+            <section id="accounts-security" aria-labelledby="h-accounts">
+              <h2 id="h-accounts">4. Accounts &amp; Security</h2>
+              <ol>
+                <li>You are responsible for maintaining the confidentiality of your account credentials.</li>
+                <li>You agree to notify us immediately of any unauthorized use of your account.</li>
+                <li>We are not liable for any loss or damage resulting from failure to secure your account.</li>
+              </ol>
+          </section>
+
+            <section id="ai-bot-tools" aria-labelledby="h-bot">
+              <h2 id="h-bot">5. AI Bot &amp; Automated Tools</h2>
+              <ol>
+                <li><strong>Disclaimer.</strong> The AI-powered bot is provided for informational and assistive purposes only. It does not provide legal, medical, financial, or professional advice.</li>
+                <li><strong>Accuracy.</strong> Responses may be incomplete, outdated, or inaccurate. Users are solely responsible for verifying any information provided.</li>
+                <li><strong>Monitoring.</strong> Interactions with the bot may be monitored for quality, compliance, and security.</li>
+              </ol>
+            </section>
+
+            <section id="ai-paper-disclaimer" aria-labelledby="h-ai-paper">
+              <h2 id="h-ai-paper">6. AI Features &amp; Paper Trading Disclaimer</h2>
+              <ol>
+                <li>All AI-generated insights, predictions, or simulations are provided for <strong>educational and research purposes only</strong> and do not constitute financial advice, investment recommendations, or guarantees of performance.</li>
+                <li>Paper trading results are hypothetical and may not reflect actual market conditions.</li>
+                <li>Vidality assumes no liability for reliance on AI outputs or simulated results.</li>
+              </ol>
+          </section>
+
+            <section id="intellectual-property" aria-labelledby="h-ip">
+              <h2 id="h-ip">7. Intellectual Property</h2>
+              <ol>
+                <li>All content, algorithms, design elements, and data available through the Platform are the exclusive property of Vidality or its licensors.</li>
+                <li>Users are granted a limited, non-transferable, revocable license to access and use the Platform strictly in accordance with these Terms.</li>
+              </ol>
+          </section>
+
+            <section id="compliance-regulatory" aria-labelledby="h-compliance">
+              <h2 id="h-compliance">8. Compliance &amp; Regulatory Status</h2>
+              <ol>
+                <li>Vidality is not a registered broker-dealer, investment advisor, or financial institution.</li>
+                <li>Nothing in these Terms or on the Platform constitutes financial, legal, or tax advice. Users are solely responsible for compliance with applicable laws.</li>
+              </ol>
+              <p class="note">Global use: certain features may be restricted or unavailable in some jurisdictions.</p>
+          </section>
+
+            <section id="payments-subscriptions" aria-labelledby="h-payments">
+              <h2 id="h-payments">9. Payments &amp; Subscriptions</h2>
+              <p class="note">If applicable now or in the future:</p>
+              <ol>
+                <li>Certain services may require payment or subscription fees; pricing and inclusions will be disclosed at the point of purchase.</li>
+                <li>Unless otherwise stated, fees are billed in advance and are non-refundable except as required by law.</li>
+                <li>Vidality may modify pricing or subscription terms with prior notice.</li>
+              </ol>
+          </section>
+
+            <section id="limitation-liability" aria-labelledby="h-ll">
+              <h2 id="h-ll">10. Limitation of Liability</h2>
+              <ol>
+                <li>The Services are provided "AS IS" and "AS AVAILABLE," without warranties of any kind, express or implied.</li>
+                <li>We do not guarantee uninterrupted, error-free, or completely secure Services.</li>
+                <li>To the maximum extent permitted by law, Vidality shall not be liable for:
+                  <ul>
+                    <li>Losses arising from use of AI insights or simulated trading results;</li>
+                    <li>Technical errors, interruptions, or unauthorized access;</li>
+                    <li>Any indirect, consequential, or punitive damages.</li>
+                  </ul>
+                </li>
+              </ol>
+          </section>
+
+            <section id="indemnification" aria-labelledby="h-indemn">
+              <h2 id="h-indemn">11. Indemnification</h2>
+              <p>You agree to indemnify, defend, and hold harmless Vidality and its affiliates, officers, employees, and agents from any claims, damages, liabilities, and expenses arising from (a) your use of the Services; (b) your violation of these Terms; or (c) your infringement of third-party rights.</p>
+          </section>
+
+            <section id="suspension-termination" aria-labelledby="h-st">
+              <h2 id="h-st">12. Suspension &amp; Termination</h2>
+              <ol>
+                <li>Vidality may suspend or terminate access to the Platform at its sole discretion for violations of these Terms or misuse of the Platform.</li>
+                <li>Users may discontinue use of the Platform at any time.</li>
+              </ol>
+          </section>
+
+            <section id="governing-law-disputes" aria-labelledby="h-law">
+              <h2 id="h-law">13. Governing Law &amp; Dispute Resolution</h2>
+              <ol>
+                <li>These Terms shall be governed by and construed in accordance with applicable law of the relevant jurisdiction, without regard to conflict-of-law rules.</li>
+                <li>Any disputes shall be resolved exclusively through arbitration or courts in a competent forum, subject to applicable law.</li>
+              </ol>
+              <p class="note">If you need a specific jurisdiction named (e.g., Western Australia), replace this section's language accordingly.</p>
+          </section>
+
+            <section id="modifications" aria-labelledby="h-mods">
+              <h2 id="h-mods">14. Modifications</h2>
+              <p>Vidality may update or amend these Terms at any time. Continued use of the Platform following such updates constitutes acceptance of the revised Terms.</p>
+          </section>
+
+            <section id="contact" aria-labelledby="h-contact">
+              <h2 id="h-contact">15. Contact Information</h2>
+              <p>For questions or concerns regarding these Terms, contact:</p>
+              <ul>
+                <li><a href="mailto:amar@vidality.com">amar@vidality.com</a></li>
+                <li><a href="mailto:contact.support.vidality@gmail.com">contact.support.vidality@gmail.com</a></li>
               </ul>
-            </div>
           </section>
 
-          {/* Account Registration */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-              <Users className="h-6 w-6 mr-2 text-green-600" />
-              3. Account Registration
-            </h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                To use certain features of our Service, you must register for an account. You agree to:
-              </p>
-              <ul className="list-disc pl-6 space-y-2">
-                <li>Provide accurate, current, and complete information during registration</li>
-                <li>Maintain and promptly update your account information</li>
-                <li>Maintain the security of your password and account</li>
-                <li>Accept all risks of unauthorized access to your account</li>
-                <li>Notify us immediately of any unauthorized use of your account</li>
-              </ul>
-            </div>
-          </section>
-
-          {/* Acceptable Use */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-              <AlertTriangle className="h-6 w-6 mr-2 text-yellow-600" />
-              4. Acceptable Use Policy
-            </h2>
-            <div className="text-gray-700 space-y-4">
-              <p>You agree not to use the Service to:</p>
-              <ul className="list-disc pl-6 space-y-2">
-                <li>Violate any applicable laws or regulations</li>
-                <li>Infringe upon the rights of others</li>
-                <li>Transmit harmful, offensive, or inappropriate content</li>
-                <li>Attempt to gain unauthorized access to our systems</li>
-                <li>Interfere with or disrupt the Service</li>
-                <li>Use the Service for any illegal or unauthorized purpose</li>
-                <li>Attempt to manipulate market data or engage in market manipulation</li>
-              </ul>
-            </div>
-          </section>
-
-          {/* Risk Disclosure */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-              <AlertTriangle className="h-6 w-6 mr-2 text-red-600" />
-              5. Risk Disclosure
-            </h2>
-            <div className="text-gray-700 space-y-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="font-semibold text-red-800 mb-2">Important Risk Warning:</p>
-                <p className="text-red-700">
-                  Trading in financial markets involves substantial risk of loss and is not suitable for all investors. 
-                  The value of investments can go down as well as up, and you may lose some or all of your invested capital.
-                </p>
-              </div>
-              <ul className="list-disc pl-6 space-y-2">
-                <li>Past performance does not guarantee future results</li>
-                <li>Market data and analysis are for informational purposes only</li>
-                <li>We do not provide investment advice or recommendations</li>
-                <li>You should consult with a qualified financial advisor before making investment decisions</li>
-                <li>Paper trading results may not reflect actual trading performance</li>
-              </ul>
-            </div>
-          </section>
-
-          {/* Privacy and Data */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-              <Lock className="h-6 w-6 mr-2 text-purple-600" />
-              6. Privacy and Data Protection
-            </h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                Your privacy is important to us. Our collection and use of personal information is governed by our 
-                Privacy Policy, which is incorporated into these Terms by reference.
-              </p>
-              <p>
-                By using our Service, you consent to the collection and use of your information as described in our 
-                Privacy Policy.
-              </p>
-            </div>
-          </section>
-
-          {/* Intellectual Property */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">7. Intellectual Property Rights</h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                The Service and its original content, features, and functionality are and will remain the exclusive 
-                property of Vidality and its licensors. The Service is protected by copyright, trademark, and other 
-                laws.
-              </p>
-              <p>
-                Our trademarks and trade dress may not be used in connection with any product or service without our 
-                prior written consent.
-              </p>
-            </div>
-          </section>
-
-          {/* Disclaimers */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">8. Disclaimers</h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                THE SERVICE IS PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS. VIDALITY DISCLAIMS ALL WARRANTIES, 
-                EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO:
-              </p>
-              <ul className="list-disc pl-6 space-y-2">
-                <li>Warranties of merchantability and fitness for a particular purpose</li>
-                <li>Warranties that the Service will be uninterrupted or error-free</li>
-                <li>Warranties regarding the accuracy or reliability of market data</li>
-                <li>Warranties that defects will be corrected</li>
-              </ul>
-            </div>
-          </section>
-
-          {/* Limitation of Liability */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">9. Limitation of Liability</h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                IN NO EVENT SHALL VIDALITY BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR 
-                PUNITIVE DAMAGES, INCLUDING WITHOUT LIMITATION, LOSS OF PROFITS, DATA, USE, GOODWILL, OR OTHER 
-                INTANGIBLE LOSSES.
-              </p>
-              <p>
-                OUR TOTAL LIABILITY TO YOU FOR ANY CLAIMS ARISING FROM THE USE OF THE SERVICE SHALL NOT EXCEED 
-                THE AMOUNT PAID BY YOU, IF ANY, FOR ACCESSING THE SERVICE.
-              </p>
-            </div>
-          </section>
-
-          {/* Termination */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Termination</h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                We may terminate or suspend your account and bar access to the Service immediately, without prior 
-                notice or liability, under our sole discretion, for any reason whatsoever.
-              </p>
-              <p>
-                Upon termination, your right to use the Service will cease immediately. If you wish to terminate 
-                your account, you may simply discontinue using the Service.
-              </p>
-            </div>
-          </section>
-
-          {/* Governing Law */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">11. Governing Law</h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                These Terms shall be interpreted and governed by the laws of the United States, without regard to 
-                its conflict of law provisions.
-              </p>
-              <p>
-                Any disputes arising from these Terms or the Service shall be resolved in the courts of the United States.
-              </p>
-            </div>
-          </section>
-
-          {/* Changes to Terms */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">12. Changes to Terms</h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                We reserve the right, at our sole discretion, to modify or replace these Terms at any time. 
-                If a revision is material, we will provide at least 30 days notice prior to any new terms taking effect.
-              </p>
-              <p>
-                What constitutes a material change will be determined at our sole discretion. By continuing to access 
-                or use our Service after any revisions become effective, you agree to be bound by the revised terms.
-              </p>
-            </div>
-          </section>
-
-          {/* Contact Information */}
-          <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">13. Contact Information</h2>
-            <div className="text-gray-700 space-y-4">
-              <p>
-                If you have any questions about these Terms of Service, please contact us at:
-              </p>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p><strong>Email:</strong> <a href="mailto:amar@vidality.com" className="text-blue-600 hover:text-blue-800">amar@vidality.com</a></p>
-                <p><strong>Address:</strong> New York, NY</p>
-                <p><strong>Phone:</strong> +1 (555) 123-4567</p>
-              </div>
-            </div>
-          </section>
-
-        </div>
-      </div>
-    </div>
+            <footer class="page-end">
+              © 2025 Vidality. All rights reserved.
+            </footer>
+          </main>
+        </body>
+        </html>
+      `
+    }} />
   )
 }

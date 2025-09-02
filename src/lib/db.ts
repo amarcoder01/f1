@@ -146,15 +146,40 @@ export class DatabaseService {
   // Remove a stock from a watchlist
   static async removeFromWatchlist(watchlistId: string, symbol: string) {
     try {
-      const deletedItem = await prisma.watchlistItem.deleteMany({
+      console.log(`🗑️ Database: Removing ${symbol} from watchlist ${watchlistId}...`)
+      
+      // First, verify the watchlist exists
+      const watchlist = await prisma.watchlist.findUnique({
+        where: { id: watchlistId }
+      })
+      
+      if (!watchlist) {
+        throw new Error(`Watchlist ${watchlistId} not found`)
+      }
+      
+      // Find the item to verify it exists
+      const item = await prisma.watchlistItem.findFirst({
         where: {
           watchlistId,
-          symbol,
+          symbol: symbol.toUpperCase(), // Normalize symbol case
         },
       })
+      
+      if (!item) {
+        throw new Error(`Stock ${symbol} not found in watchlist`)
+      }
+      
+      // Delete the item
+      const deletedItem = await prisma.watchlistItem.delete({
+        where: {
+          id: item.id
+        },
+      })
+      
+      console.log(`✅ Database: Successfully removed ${symbol} from watchlist ${watchlistId}`)
       return deletedItem
     } catch (error) {
-      console.error('Error removing from watchlist:', error)
+      console.error('❌ Error removing from watchlist:', error)
       throw error
     }
   }

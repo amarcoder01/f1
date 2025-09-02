@@ -157,6 +157,11 @@ export function EnhancedStockChart({
   const [error, setError] = useState<string | null>(propError || null)
   const [realTimeMode, setRealTimeMode] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  
+  // Data source tracking
+  const [dataSource, setDataSource] = useState<'real' | 'fallback' | 'unknown'>('unknown')
+  const [dataWarning, setDataWarning] = useState<string | null>(null)
+  const [dataTimestamp, setDataTimestamp] = useState<Date | null>(null)
 
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -484,26 +489,43 @@ export function EnhancedStockChart({
     // Always generate fallback data first to ensure we have something to show
     const fallbackData = generateFallbackData(symbol)
     setChartData(fallbackData)
+    setDataSource('fallback')
+    setDataWarning('Using simulated data - Loading real data...')
+    setDataTimestamp(new Date())
     console.log('Initial fallback data set, length:', fallbackData.length)
     
     try {
       console.log(`Fetching chart data for ${symbol} with timeframe ${timeframe}`)
-      const newData = await fetchChartData(timeframe)
-      console.log('Fetched chart data:', { dataLength: newData.length, sampleData: newData[0] })
+      const response = await fetch(`/api/chart/${symbol}?range=${timeframe}`)
+      const result = await response.json()
       
-      if (newData && newData.length > 0) {
-        setChartData(newData)
-        console.log('Chart data updated with real data, length:', newData.length)
+      if (result.success && result.data && result.data.length > 0) {
+        console.log('Fetched real chart data:', { 
+          dataLength: result.data.length, 
+          source: result.source,
+          isRealData: result.isRealData,
+          warning: result.warning
+        })
+        
+        setChartData(result.data)
+        setDataSource(result.isRealData ? 'real' : 'fallback')
+        setDataWarning(result.warning || null)
+        setDataTimestamp(new Date(result.timestamp || Date.now()))
+        console.log('Chart data updated with real data, length:', result.data.length)
         setError(null) // Clear any errors on success
       } else {
         console.warn('No chart data received, keeping fallback data')
+        setDataSource('fallback')
+        setDataWarning('Using simulated data - No real data available')
         // Keep the fallback data we already set
       }
     } catch (error) {
       console.error('Error fetching initial chart data:', error)
       console.log('Keeping fallback data due to error')
+      setDataSource('fallback')
+      setDataWarning('Using simulated data - Network error')
       // Keep the fallback data we already set
-      setError('Unable to fetch real-time data, showing sample data')
+      setError('Unable to fetch real-time data, showing simulated data')
     } finally {
       console.log('Setting isLoading to false')
       setIsLoading(false)
@@ -512,21 +534,39 @@ export function EnhancedStockChart({
 
   // Generate fallback chart data when API fails
   const generateFallbackData = (symbol: string): OHLCVData[] => {
-    console.log('Generating fallback data for symbol:', symbol)
+    console.log('⚠️ Generating fallback data for symbol:', symbol, '- NOT REAL MARKET DATA')
     
-    // Base prices for known symbols
+    // Use more realistic base prices based on current market conditions (as of 2024)
     const basePrices: { [key: string]: number } = {
-      'AAPL': 180,
-      'MSFT': 380,
-      'GOOGL': 140,
-      'TSLA': 250,
-      'AMZN': 145,
-      'NVDA': 450,
-      'META': 300,
-      'NFLX': 400
+      'AAPL': 195.50,
+      'MSFT': 415.20,
+      'GOOGL': 175.80,
+      'TSLA': 245.30,
+      'AMZN': 155.40,
+      'NVDA': 875.60,
+      'META': 485.20,
+      'NFLX': 585.40,
+      'SPY': 520.80,
+      'QQQ': 435.60,
+      'IWM': 195.40
     }
     
-    const basePrice = basePrices[symbol] || (100 + Math.random() * 400)
+    // Use realistic base price or generate based on symbol characteristics
+    let basePrice = basePrices[symbol]
+    if (!basePrice) {
+      // Generate more realistic price based on symbol characteristics
+      if (symbol.length <= 3) {
+        // Likely a major stock - higher price range
+        basePrice = 150 + Math.random() * 300
+      } else if (symbol.length <= 5) {
+        // Mid-cap range
+        basePrice = 50 + Math.random() * 200
+      } else {
+        // Smaller cap or ETF
+        basePrice = 20 + Math.random() * 100
+      }
+    }
+    
     const dataPoints: OHLCVData[] = []
     const now = Date.now()
     
@@ -536,7 +576,7 @@ export function EnhancedStockChart({
     
     switch (timeframe) {
       case '1d':
-        numPoints = 390 // Market minutes
+        numPoints = 390 // Market minutes (6.5 hours * 60 minutes)
         timeInterval = 60 * 1000 // 1 minute
         break
       case '5d':
@@ -556,30 +596,40 @@ export function EnhancedStockChart({
         timeInterval = 24 * 60 * 60 * 1000
         break
       case '1y':
-        numPoints = 252
+        numPoints = 252 // Trading days in a year
         timeInterval = 24 * 60 * 60 * 1000
         break
       case '5y':
-        numPoints = 1260
+        numPoints = 1260 // 5 years of trading days
         timeInterval = 24 * 60 * 60 * 1000
         break
     }
     
     let currentPrice = basePrice
+    let trend = 0 // Cumulative trend for more realistic patterns
     
     for (let i = 0; i < numPoints; i++) {
       const time = now - (numPoints - i) * timeInterval
       
-      // Random walk with slight upward bias
-      const volatility = 0.02
-      const change = (Math.random() - 0.48) * volatility // Slight upward bias
-      currentPrice = currentPrice * (1 + change)
+      // More realistic price movement with trend and volatility
+      const volatility = timeframe === '1d' ? 0.015 : 0.025 // Higher volatility for longer timeframes
+      const trendBias = Math.sin(i / 20) * 0.001 // Subtle trend changes
+      const randomWalk = (Math.random() - 0.5) * volatility
       
-      const high = currentPrice * (1 + Math.random() * 0.01)
-      const low = currentPrice * (1 - Math.random() * 0.01)
-      const open = currentPrice * (1 + (Math.random() - 0.5) * 0.005)
+      trend += trendBias
+      const change = randomWalk + trend
+      currentPrice = Math.max(currentPrice * (1 + change), 0.01) // Prevent negative prices
+      
+      // Generate realistic OHLC data
+      const dailyRange = currentPrice * (0.005 + Math.random() * 0.02) // 0.5% to 2.5% daily range
+      const open = currentPrice * (1 + (Math.random() - 0.5) * 0.01)
       const close = currentPrice
-      const volume = Math.random() * 1000000 + 100000
+      const high = Math.max(open, close) + Math.random() * dailyRange * 0.6
+      const low = Math.min(open, close) - Math.random() * dailyRange * 0.4
+      
+      // Realistic volume based on price and time
+      const baseVolume = timeframe === '1d' ? 1000000 : 5000000 // Higher volume for longer timeframes
+      const volume = Math.floor(baseVolume * (0.5 + Math.random()) * (currentPrice / 100))
 
       dataPoints.push({
         time,
@@ -591,7 +641,7 @@ export function EnhancedStockChart({
       })
     }
     
-    console.log(`Generated fallback data for ${symbol} (${timeframe}) with ${dataPoints.length} points`)
+    console.log(`⚠️ Generated ${dataPoints.length} fallback data points for ${symbol} (${timeframe}) - NOT REAL MARKET DATA`)
     return dataPoints
   }
 
@@ -1460,6 +1510,42 @@ export function EnhancedStockChart({
               </div>
               <div className="text-xs text-gray-400 mt-1">
                 Current Price
+              </div>
+            </div>
+          )}
+          
+          {/* Data Source Warning */}
+          {dataSource === 'fallback' && dataWarning && (
+            <div className="absolute top-6 right-6 bg-orange-600/90 backdrop-blur-sm rounded-lg p-3 text-sm border border-orange-500/50 max-w-xs">
+              <div className="flex items-start space-x-2">
+                <div className="w-4 h-4 text-orange-200 mt-0.5">
+                  ⚠️
+                </div>
+                <div>
+                  <div className="font-medium text-orange-100 text-xs">
+                    Simulated Data
+                  </div>
+                  <div className="text-orange-200 text-xs mt-1">
+                    {dataWarning}
+                  </div>
+                  {dataTimestamp && (
+                    <div className="text-orange-300 text-xs mt-1">
+                      Generated: {dataTimestamp.toLocaleTimeString()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Data Source Indicator */}
+          {dataSource === 'real' && (
+            <div className="absolute top-6 right-6 bg-green-600/80 backdrop-blur-sm rounded-lg px-3 py-2 text-sm border border-green-500/50">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-200 rounded-full"></div>
+                <span className="font-medium text-green-100 text-xs">
+                  Real Data
+                </span>
               </div>
             </div>
           )}

@@ -15,7 +15,8 @@ import {
   CheckCircle,
   XCircle,
   Target,
-  Activity
+  Activity,
+  Database
 } from 'lucide-react'
 
 interface BacktestResult {
@@ -26,9 +27,22 @@ interface BacktestResult {
       sharpe_ratio: number
       max_drawdown: number
       volatility: number
+      win_rate?: number
+      profit_factor?: number
     }
     total_trades: number
     portfolio_value: number
+    validation?: {
+      accuracy_grade?: string
+      accuracy_metrics?: {
+        data_accuracy?: number
+        calculation_accuracy?: number
+        strategy_accuracy?: number
+        overall_accuracy?: number
+        confidence_level?: number
+        validation_score?: number
+      }
+    }
   }
   error?: string
 }
@@ -40,7 +54,7 @@ interface PolygonBacktestComponentProps {
 export default function PolygonBacktestComponent({ className }: PolygonBacktestComponentProps) {
   const [strategy, setStrategy] = useState('momentum')
   const [symbols, setSymbols] = useState('AAPL,MSFT,GOOGL')
-  const [startDate, setStartDate] = useState('2019-01-01')
+  const [startDate, setStartDate] = useState('2021-01-01')
   const [endDate, setEndDate] = useState('2024-12-31')
   const [initialCapital, setInitialCapital] = useState(100000)
   const [positionSize, setPositionSize] = useState(0.1)
@@ -49,15 +63,69 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
   const [result, setResult] = useState<BacktestResult | null>(null)
 
   const formatPercentage = (value: number): string => {
-    return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(2)}%`
+    // Convert decimal to percentage and format nicely
+    const percentage = value * 100;
+    if (Math.abs(percentage) < 0.01) {
+      return '0.00%';
+    }
+    // Handle very small percentages
+    if (Math.abs(percentage) < 0.1) {
+      return `${percentage >= 0 ? '+' : ''}${percentage.toFixed(3)}%`;
+    }
+    return `${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%`;
   }
 
   const formatNumber = (value: number): string => {
+    // Format numbers with appropriate decimal places
+    if (Math.abs(value) < 0.01) {
+      return '0.00';
+    }
+    if (Math.abs(value) >= 1000) {
+      return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(value);
+    }
     return new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(value)
+    }).format(value);
   }
+
+  const formatCurrency = (value: number): string => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+
+  const validateDateRange = () => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const minDate = new Date('2020-08-01'); // Polygon.io Starter Plan data starts from August 2020
+    const maxDate = new Date();
+    
+    if (start < minDate) {
+      return `Start date cannot be before 2020-08-01. Available data range: 2020-08-01 to current date.`;
+    }
+    
+    if (end > maxDate) {
+      return `End date cannot be in the future. Available data range: 2020-08-01 to current date.`;
+    }
+    
+    if (start >= end) {
+      return `End date must be after start date.`;
+    }
+    
+    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysDiff < 30) {
+      return `Date range must be at least 30 days for meaningful backtesting.`;
+    }
+    
+    return null; // No error
+  };
 
   const runBacktest = async () => {
     console.log('🚀 runBacktest function called')
@@ -65,6 +133,17 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
     setResult(null)
 
     try {
+      // Validate date range
+      const dateError = validateDateRange();
+      if (dateError) {
+        setResult({
+          success: false,
+          error: dateError
+        });
+        setLoading(false);
+        return;
+      }
+
       // Create parameters object from individual state values
       const parsedParameters = {
         initial_capital: initialCapital,
@@ -119,13 +198,25 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
               total_return: data.data.performance.total_return || 0,
               sharpe_ratio: data.data.performance.sharpe_ratio || 0,
               max_drawdown: data.data.performance.max_drawdown || 0,
-              volatility: data.data.performance.volatility || 0
+              volatility: data.data.performance.volatility || 0,
+              win_rate: data.data.performance.win_rate || 0,
+              profit_factor: data.data.performance.profit_factor || 0
             },
             total_trades: data.data.performance.total_trades || 0,
-            portfolio_value: data.data.performance.final_portfolio_value || data.data.performance.initial_capital || 100000
+            portfolio_value: data.data.performance.final_portfolio_value || data.data.performance.initial_capital || 100000,
+            validation: data.data.validation || null
           }
         }
         console.log('Processed result:', processedResult)
+        console.log('Performance values:', {
+          total_return: processedResult.results.performance.total_return,
+          sharpe_ratio: processedResult.results.performance.sharpe_ratio,
+          max_drawdown: processedResult.results.performance.max_drawdown,
+          win_rate: processedResult.results.performance.win_rate,
+          profit_factor: processedResult.results.performance.profit_factor,
+          total_trades: processedResult.results.total_trades,
+          portfolio_value: processedResult.results.portfolio_value
+        })
         try {
           setResult(processedResult)
           console.log('✅ setResult completed successfully')
@@ -162,15 +253,15 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Configuration Panel */}
         <Card>
-                     <CardHeader>
-             <CardTitle className="flex items-center gap-2">
-               <Target className="h-5 w-5" />
-               Backtesting Configuration
-             </CardTitle>
-             <CardDescription>
-               Configure your backtesting parameters and strategy settings
-             </CardDescription>
-           </CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Configuration
+            </CardTitle>
+            <CardDescription>
+              Configure your backtesting parameters
+            </CardDescription>
+          </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="strategy">Strategy</Label>
@@ -203,9 +294,11 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
+                  min="2020-08-01"
+                  max={new Date().toISOString().split('T')[0]}
                 />
                                  <p className="text-xs text-gray-500">
-                   Select your preferred start date
+                   Available: 2020-08-01 to current date
                  </p>
               </div>
               <div className="space-y-2">
@@ -215,9 +308,11 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
+                  min="2020-08-01"
+                  max={new Date().toISOString().split('T')[0]}
                 />
                                  <p className="text-xs text-gray-500">
-                   Select your preferred end date
+                   Must be after start date, up to current date
                  </p>
               </div>
             </div>
@@ -267,7 +362,7 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
               <Button 
                 onClick={runBacktest} 
                 disabled={loading}
-                className="flex-1"
+                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold"
               >
                 {loading ? (
                   <>
@@ -283,9 +378,7 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
               </Button>
             </div>
 
-            <div className="text-xs text-gray-500 text-center">
-              Professional backtesting platform
-            </div>
+
           </CardContent>
         </Card>
 
@@ -308,8 +401,17 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
                     <CheckCircle className="h-5 w-5" />
                     <span className="font-semibold">Backtest Completed Successfully</span>
                   </div>
+                  
+                  {result.results?.validation?.accuracy_grade && (
+                    <div className="flex items-center gap-2 text-blue-600">
+                      <CheckCircle className="h-5 w-5" />
+                      <span className="font-semibold">
+                        ✅ Validated & Accurate (Grade: {result.results.validation.accuracy_grade})
+                      </span>
+                    </div>
+                  )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div className="text-center p-3 bg-green-50 rounded-lg">
                       <div className="text-2xl font-bold text-green-600">
                         {formatPercentage(result.results?.performance.total_return || 0)}
@@ -334,22 +436,84 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
                       </div>
                       <div className="text-sm text-gray-600">Total Trades</div>
                     </div>
+                    <div className="text-center p-3 bg-orange-50 rounded-lg">
+                      <div className="text-2xl font-bold text-orange-600">
+                        {formatPercentage(result.results?.performance.win_rate || 0)}
+                      </div>
+                      <div className="text-sm text-gray-600">Win Rate</div>
+                    </div>
+                    <div className="text-center p-3 bg-indigo-50 rounded-lg">
+                      <div className="text-2xl font-bold text-indigo-600">
+                        {formatNumber(result.results?.performance.profit_factor || 0)}
+                      </div>
+                      <div className="text-sm text-gray-600">Profit Factor</div>
+                    </div>
                   </div>
 
                   <div className="text-center p-3 bg-gray-50 rounded-lg">
                     <div className="text-xl font-bold text-gray-800">
-                      ${formatNumber(result.results?.portfolio_value || 0)}
+                      {formatCurrency(result.results?.portfolio_value || 0)}
                     </div>
                     <div className="text-sm text-gray-600">Final Portfolio Value</div>
                   </div>
+
+                  {/* Validation Accuracy Section */}
+                  {result.results?.validation && (
+                    <div className="space-y-3">
+                      <div className="text-center">
+                        <h4 className="font-semibold text-gray-800 mb-2">Backtest Validation & Accuracy</h4>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="text-center p-2 bg-green-50 rounded border">
+                          <div className="text-lg font-bold text-green-600">
+                            {formatPercentage(result.results.validation.accuracy_metrics?.data_accuracy || 0)}
+                          </div>
+                          <div className="text-xs text-gray-600">Data Accuracy</div>
+                        </div>
+                        <div className="text-center p-2 bg-blue-50 rounded border">
+                          <div className="text-lg font-bold text-blue-600">
+                            {formatPercentage(result.results.validation.accuracy_metrics?.calculation_accuracy || 0)}
+                          </div>
+                          <div className="text-xs text-gray-600">Calculation Accuracy</div>
+                        </div>
+                        <div className="text-center p-2 bg-purple-50 rounded border">
+                          <div className="text-lg font-bold text-purple-600">
+                            {formatPercentage(result.results.validation.accuracy_metrics?.strategy_accuracy || 0)}
+                          </div>
+                          <div className="text-xs text-gray-600">Strategy Accuracy</div>
+                        </div>
+                        <div className="text-center p-2 bg-orange-50 rounded border">
+                          <div className="text-lg font-bold text-orange-600">
+                            {formatPercentage(result.results.validation.accuracy_metrics?.overall_accuracy || 0)}
+                          </div>
+                          <div className="text-xs text-gray-600">Overall Accuracy</div>
+                        </div>
+                      </div>
+
+                      <div className="text-center p-2 bg-indigo-50 rounded border">
+                        <div className="text-lg font-bold text-indigo-600">
+                          {result.results.validation.accuracy_grade || 'N/A'}
+                        </div>
+                        <div className="text-xs text-gray-600">Accuracy Grade</div>
+                      </div>
+
+                      <div className="text-center p-2 bg-gray-50 rounded border">
+                        <div className="text-sm font-semibold text-gray-700">
+                          Confidence Level: {formatPercentage(result.results.validation.accuracy_metrics?.confidence_level || 0)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Validation Score: {formatNumber(result.results.validation.accuracy_metrics?.validation_score || 0)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <Badge variant="outline" className="w-full justify-center">
                     Strategy: {strategy}
                   </Badge>
                   
-                  <div className="text-xs text-gray-500 text-center">
-                    Professional backtesting results
-                  </div>
+
                 </div>
               ) : (
                 <div className="text-center p-6">
@@ -371,9 +535,7 @@ export default function PolygonBacktestComponent({ className }: PolygonBacktestC
                 <div className="text-xs">
                   Configure your parameters and click "Run Backtest" to see results
                 </div>
-                <div className="text-xs mt-2 text-blue-600">
-                  Professional backtesting platform ready
-                </div>
+
               </div>
             )}
           </CardContent>

@@ -1,38 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { polygonAPI } from '@/lib/polygon-api'
+
+const POLYGON_API_KEY = process.env.NEXT_PUBLIC_POLYGON_API_KEY || process.env.POLYGON_API_KEY
+
+interface MarketStatus {
+  market: string
+  serverTime: string
+}
+
+async function makePolygonRequest(endpoint: string): Promise<any> {
+  if (!POLYGON_API_KEY) {
+    throw new Error('Polygon API key is not configured')
+  }
+
+  const url = `https://api.polygon.io${endpoint}${endpoint.includes('?') ? '&' : '?'}apikey=${POLYGON_API_KEY}`
+  
+  try {
+    const response = await fetch(url)
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Invalid API key. Please check your Polygon.io API key configuration.')
+      }
+      if (response.status === 403) {
+        throw new Error('Access forbidden. Please check your Polygon.io subscription plan.')
+      }
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data.status === 'ERROR') {
+      throw new Error(data.error || 'API returned an error')
+    }
+    
+    return data
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error
+    }
+    throw new Error('Network error occurred while fetching data')
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
-    // Get market status from Polygon.io
-    const marketStatus = await polygonAPI.getMarketStatus()
+    if (!POLYGON_API_KEY) {
+      return NextResponse.json(
+        { error: 'Polygon API key is not configured' },
+        { status: 500 }
+      )
+    }
+
+    // Get market status from Polygon API
+    const marketStatusResponse = await makePolygonRequest('/v1/marketstatus/now')
     
-    return NextResponse.json({
-      isOpen: marketStatus.isOpen,
-      nextOpen: marketStatus.nextOpen,
-      nextClose: marketStatus.nextClose,
-      lastUpdated: new Date().toISOString(),
-      isRealTime: marketStatus.isOpen
-    })
+    // Use the actual market status from Polygon API
+    const marketStatus: MarketStatus = {
+      market: marketStatusResponse.market || 'closed',
+      serverTime: marketStatusResponse.serverTime || new Date().toISOString()
+    }
+
+    return NextResponse.json(marketStatus)
   } catch (error) {
     console.error('Error fetching market status:', error)
     
-    // Fallback: estimate market status based on time
-    const now = new Date()
-    const etTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}))
-    const day = etTime.getDay() // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const hour = etTime.getHours()
-    const minute = etTime.getMinutes()
-    const timeInMinutes = hour * 60 + minute
-    
-    const isMarketOpen = day >= 1 && day <= 5 && timeInMinutes >= 570 && timeInMinutes < 960 // 9:30 AM to 4:00 PM ET
-    
-    return NextResponse.json({
-      isOpen: isMarketOpen,
-      nextOpen: null,
-      nextClose: null,
-      lastUpdated: new Date().toISOString(),
-      isRealTime: isMarketOpen,
-      error: 'Using fallback market status'
-    })
+    // Return error response instead of fallback
+    return NextResponse.json(
+      { error: 'Failed to fetch market status' },
+      { status: 500 }
+    )
   }
 }

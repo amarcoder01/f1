@@ -6,8 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { 
-  DollarSign, 
-  PieChart, 
   Eye, 
   Plus,
   Star,
@@ -42,16 +40,7 @@ export default function Dashboard() {
     loadUserData()
   }, [loadWatchlists])
 
-  // Calculate portfolio statistics
-  const totalPortfolioValue = portfolios.reduce((total, portfolio) => {
-    return total + portfolio.positions.reduce((posTotal, position) => {
-      return posTotal + (position.marketValue || 0)
-    }, 0)
-  }, 0)
 
-  const totalPositions = portfolios.reduce((total, portfolio) => {
-    return total + portfolio.positions.length
-  }, 0)
 
   // Calculate total watchlist items (not just watchlists)
   const totalWatchlistItems = watchlists.reduce((total, watchlist) => {
@@ -66,7 +55,7 @@ export default function Dashboard() {
   })
 
   // Check if user is new (no data)
-  const isNewUser = totalPositions === 0 && totalWatchlistItems === 0 && totalPortfolioValue === 0
+  const isNewUser = totalWatchlistItems === 0
 
   // Additional check: If there are no watchlists at all, definitely show welcome
   const hasNoWatchlists = watchlists.length === 0
@@ -83,9 +72,7 @@ export default function Dashboard() {
       itemCount: w.items?.length || 0,
       items: w.items?.map(item => item.symbol) || []
     })),
-    isNewUser,
-    totalPositions,
-    totalPortfolioValue
+    isNewUser
   })
 
   // Additional debug: Check if any watchlist has items
@@ -95,14 +82,7 @@ export default function Dashboard() {
     items: w.items?.map(item => item.symbol) || []
   })))
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value)
-  }
+
 
   if (isLoading) {
     return (
@@ -176,42 +156,6 @@ export default function Dashboard() {
 
       {/* Portfolio Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Total Portfolio Value */}
-        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-sm font-medium text-green-700 dark:text-green-300">
-              <span>Portfolio Value</span>
-              <DollarSign className="w-4 h-4" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-900 dark:text-green-100">
-              {formatCurrency(totalPortfolioValue)}
-            </div>
-            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-              {totalPositions} position{totalPositions !== 1 ? 's' : ''}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Total Positions */}
-        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-sm font-medium text-blue-700 dark:text-blue-300">
-              <span>Total Positions</span>
-              <PieChart className="w-4 h-4" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-              {totalPositions}
-            </div>
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-              Across {portfolios.length} portfolio{portfolios.length !== 1 ? 's' : ''}
-            </p>
-          </CardContent>
-        </Card>
-
         {/* Watchlist Items */}
         <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
           <CardHeader className="pb-3">

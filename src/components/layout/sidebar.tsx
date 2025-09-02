@@ -14,7 +14,14 @@ import {
   BarChart3,
   Play,
   Wrench,
-  TrendingUp
+  TrendingUp,
+  TrendingDown,
+  Building2,
+  Filter,
+  Brain,
+  DollarSign,
+  BrainCircuit,
+  Target
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store'
@@ -45,11 +52,28 @@ export function Sidebar() {
       description: 'Overview of your trading activity'
     },
     {
-      id: 'market',
-      label: 'Market',
-      icon: BarChart3,
-      href: '/market',
-      description: 'Real-time US stock market data'
+      id: 'market-view',
+      label: 'Market View',
+      icon: Building2,
+      href: '/market-view',
+      description: 'Browse and search US stocks',
+      badge: 'STOCKS'
+    },
+    {
+      id: 'top-movers',
+      label: 'Top Movers',
+      icon: TrendingDown,
+      href: '/top-movers',
+      description: 'Top gainers and losers',
+      badge: 'LIVE'
+    },
+    {
+      id: 'screener',
+      label: 'Stock Screener',
+      icon: Filter,
+      href: '/screener',
+      description: 'Advanced stock screening with filters',
+      badge: 'SCREEN'
     },
     {
       id: 'watchlist',
@@ -75,12 +99,44 @@ export function Sidebar() {
       badge: 'AI'
     },
     {
-      id: 'tools',
-      label: 'Tools',
-      icon: Wrench,
-      href: '/tools',
-      description: 'Professional backtesting and strategy analysis',
+      id: 'backtesting',
+      label: 'Backtesting',
+      icon: BarChart3,
+      href: '/backtesting',
+      description: 'Advanced strategy backtesting platform',
       badge: 'BACKTEST'
+    },
+    {
+      id: 'ai-predictions',
+      label: 'AI Predictions',
+      icon: Brain,
+      href: '/ai-predictions',
+      description: 'AI-powered market predictions',
+      badge: 'AI'
+    },
+    {
+      id: 'portfolio-manager',
+      label: 'Portfolio Manager',
+      icon: DollarSign,
+      href: '/portfolio-manager',
+              description: 'Portfolio management',
+      badge: 'PRO'
+    },
+    {
+      id: 'strategy-builder',
+      label: 'Strategy Builder',
+      icon: BrainCircuit,
+      href: '/strategy-builder',
+      description: 'AI-powered strategy creation',
+      badge: 'BUILDER'
+    },
+    {
+      id: 'stock-comparison',
+      label: 'Stock Comparison',
+      icon: Target,
+      href: '/stock-comparison',
+      description: 'Compare stocks with AI analysis',
+      badge: 'COMPARE'
     },
     {
       id: 'advanced-charts',
@@ -100,10 +156,10 @@ export function Sidebar() {
     <motion.div
       initial={false}
       animate={{ width: sidebarCollapsed ? 70 : 280 }}
-      className="h-screen bg-card border-r border-border flex flex-col"
+      className="sidebar-container bg-card border-r border-border"
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
+      <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
         <AnimatePresence mode="wait">
           {!sidebarCollapsed ? (
             <motion.div
@@ -137,7 +193,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation Items */}
-      <nav className="flex-1 overflow-y-auto py-4">
+      <nav className="sidebar-content py-4">
         <div className="space-y-1 px-3">
           {sidebarItems.map((item) => {
             const Icon = item.icon
@@ -195,7 +251,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border flex-shrink-0">
         <AnimatePresence mode="wait">
           {!sidebarCollapsed && (
             <motion.div

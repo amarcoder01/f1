@@ -36,18 +36,16 @@ export async function GET(request: NextRequest) {
     // Get API credentials from environment variables
     const apiKey = process.env.GOOGLE_SEARCH_API_KEY
     const searchEngineId = process.env.GOOGLE_SEARCH_ENGINE_ID
-
+    
     if (!apiKey || !searchEngineId) {
-      console.error('❌ Google Search API credentials not configured')
       return NextResponse.json(
-        { 
-          success: false, 
-          message: 'Web search service not configured',
-          error: 'Missing API credentials'
-        },
+        { success: false, message: 'Google Search API credentials not configured' },
         { status: 500 }
       )
     }
+
+    console.log('🔍 Using search API key:', apiKey.substring(0, 10) + '...')
+    console.log('🔍 Using search engine ID:', searchEngineId)
 
     // Construct the Google Custom Search API URL
     const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=${Math.min(limit, 10)}`
@@ -74,7 +72,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: results,
+      results: results,
       count: results.length,
       totalResults: data.searchInformation?.totalResults || '0',
       searchTime: data.searchInformation?.searchTime || 0,
@@ -99,7 +97,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { query, limit = 10 } = body
+    const { query, maxResults = 10 } = body
 
     if (!query) {
       return NextResponse.json(
@@ -111,23 +109,21 @@ export async function POST(request: NextRequest) {
     // Get API credentials from environment variables
     const apiKey = process.env.GOOGLE_SEARCH_API_KEY
     const searchEngineId = process.env.GOOGLE_SEARCH_ENGINE_ID
-
+    
     if (!apiKey || !searchEngineId) {
-      console.error('❌ Google Search API credentials not configured')
       return NextResponse.json(
-        { 
-          success: false, 
-          message: 'Web search service not configured',
-          error: 'Missing API credentials'
-        },
+        { success: false, message: 'Google Search API credentials not configured' },
         { status: 500 }
       )
     }
 
-    // Construct the Google Custom Search API URL
-    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=${Math.min(limit, 10)}`
+    console.log('🔍 Using search API key:', apiKey.substring(0, 10) + '...')
+    console.log('🔍 Using search engine ID:', searchEngineId)
 
-    console.log('🔍 Performing web search (POST):', { query, limit })
+    // Construct the Google Custom Search API URL
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=${Math.min(maxResults, 10)}`
+
+    console.log('🔍 Performing web search (POST):', { query, maxResults })
 
     const response = await fetch(searchUrl)
     const data: GoogleSearchResponse = await response.json()
@@ -149,7 +145,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: results,
+      results: results,
       count: results.length,
       totalResults: data.searchInformation?.totalResults || '0',
       searchTime: data.searchInformation?.searchTime || 0,

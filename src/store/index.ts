@@ -313,15 +313,19 @@ export const useWatchlistStore = create<WatchlistStore>()(
           const item = watchlist?.items.find(i => i.id === itemId)
           
           if (!item) {
+            console.error('Item not found in watchlist:', { watchlistId, itemId })
             set({ isLoading: false })
-            return
+            throw new Error('Item not found in watchlist')
           }
           
-          const response = await fetch(`/api/watchlist/${watchlistId}/items?symbol=${item.symbol}`, {
+          console.log(`🗑️ Removing ${item.symbol} from watchlist ${watchlistId}...`)
+          
+          const response = await fetch(`/api/watchlist/${watchlistId}/items?symbol=${encodeURIComponent(item.symbol)}`, {
             method: 'DELETE'
           })
           
           if (response.ok) {
+            console.log(`✅ Successfully removed ${item.symbol} from watchlist`)
             set((state) => ({
               watchlists: state.watchlists.map(w =>
                 w.id === watchlistId
@@ -335,12 +339,19 @@ export const useWatchlistStore = create<WatchlistStore>()(
               isLoading: false
             }))
           } else {
-            console.error('Failed to remove item from watchlist')
+            const errorData = await response.json().catch(() => ({}))
+            console.error('❌ Failed to remove item from watchlist:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorData
+            })
             set({ isLoading: false })
+            throw new Error(`Failed to remove item: ${errorData.message || response.statusText}`)
           }
         } catch (error) {
-          console.error('Error removing item from watchlist:', error)
+          console.error('❌ Error removing item from watchlist:', error)
           set({ isLoading: false })
+          throw error
         }
       },
       

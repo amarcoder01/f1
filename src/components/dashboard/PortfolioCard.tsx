@@ -4,7 +4,7 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { TrendingUp, TrendingDown, DollarSign, PieChart, Eye, Activity } from 'lucide-react'
+import { TrendingUp, TrendingDown, Eye, Activity } from 'lucide-react'
 
 interface PortfolioCardProps {
   title: string
@@ -93,37 +93,7 @@ export function PortfolioCard({
   )
 }
 
-// Predefined portfolio cards
-export function PortfolioValueCard({ value, change, changePercent }: { 
-  value: number
-  change?: number
-  changePercent?: number
-}) {
-  return (
-    <PortfolioCard
-      title="Portfolio Value"
-      value={value}
-      change={change}
-      changePercent={changePercent}
-      icon={DollarSign}
-      iconColor="text-green-600"
-      subtitle="today"
-      trend={changePercent && changePercent >= 0 ? 'up' : 'down'}
-    />
-  )
-}
 
-export function TotalPositionsCard({ count }: { count: number }) {
-  return (
-    <PortfolioCard
-      title="Total Positions"
-      value={count}
-      icon={PieChart}
-      iconColor="text-blue-600"
-      subtitle="Active positions"
-    />
-  )
-}
 
 export function WatchlistsCard({ count }: { count: number }) {
   return (

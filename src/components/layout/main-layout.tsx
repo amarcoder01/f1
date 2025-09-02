@@ -4,7 +4,6 @@ import React, { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
-import { Footer } from './Footer'
 import { useUIStore } from '@/store'
 
 interface MainLayoutProps {
@@ -19,24 +18,21 @@ export function MainLayout({ children }: MainLayoutProps) {
   }, [])
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="layout-container flex bg-background">
       {/* Sidebar */}
       <Sidebar />
       
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="main-content">
         {/* Header */}
         <Header />
         
         {/* Content */}
-        <main className="flex-1">
-          <div className="min-h-screen">
+        <main className="main-content-scrollable">
+          <div className="min-h-full">
             {children}
           </div>
         </main>
-
-        {/* Footer */}
-        <Footer />
       </div>
     </div>
   )

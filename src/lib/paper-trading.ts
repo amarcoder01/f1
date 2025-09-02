@@ -9,7 +9,7 @@ import {
   Stock
 } from '@/types'
 import { prisma } from './db'
-import { getStockData } from './multi-source-api'
+import { polygonAPI } from './polygon-api'
 
 export class PaperTradingService {
   // Create a new paper trading account
@@ -117,8 +117,8 @@ export class PaperTradingService {
         throw new Error('Stop-limit orders require both price and stop price')
       }
 
-      // Get current stock data
-      const stockData = await getStockData(symbol)
+      // Get current stock data from Polygon.io
+      const stockData = await polygonAPI.getUSStockData(symbol)
       if (!stockData) {
         throw new Error(`Stock data not available for ${symbol}`)
       }
@@ -186,8 +186,8 @@ export class PaperTradingService {
         return
       }
 
-      // Get current stock price
-      const stockData = await getStockData(order.symbol)
+      // Get current stock price from Polygon.io
+      const stockData = await polygonAPI.getUSStockData(order.symbol)
       if (!stockData) {
         throw new Error(`Stock data not available for ${order.symbol}`)
       }
@@ -336,10 +336,10 @@ export class PaperTradingService {
         throw new Error('Account not found')
       }
 
-      // Update positions with current prices
+      // Update positions with current prices from Polygon.io
       let totalPositionValue = 0
       for (const position of account.positions) {
-        const stockData = await getStockData(position.symbol)
+        const stockData = await polygonAPI.getUSStockData(position.symbol)
         if (stockData) {
           const currentPrice = stockData.price
           const marketValue = currentPrice * position.quantity

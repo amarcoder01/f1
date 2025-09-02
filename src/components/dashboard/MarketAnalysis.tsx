@@ -47,70 +47,65 @@ const defaultMarketData: MarketData[] = [
 
 interface MarketAnalysisProps {
   data?: MarketData[]
+  isRealData?: boolean
+  warning?: string | null
 }
 
-export function MarketAnalysis({ data = defaultMarketData }: MarketAnalysisProps) {
+export function MarketAnalysis({ 
+  data = defaultMarketData, 
+  isRealData = false, 
+  warning = null 
+}: MarketAnalysisProps) {
   const getChangeColor = (change: number) => {
     return change >= 0 ? 'text-green-400' : 'text-red-400'
   }
 
   const getChangeIcon = (change: number) => {
-    return change >= 0 ? (
-      <TrendingUp className="w-4 h-4" />
-    ) : (
-      <TrendingDown className="w-4 h-4" />
-    )
+    return change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Data Source Warning */}
+      {!isRealData && (
+        <div className="bg-orange-600/20 border border-orange-500/30 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <div className="w-5 h-5 text-orange-400 mt-0.5">⚠️</div>
+            <div>
+              <h4 className="font-medium text-orange-200">Market Data Notice</h4>
+              <p className="text-orange-300 text-sm mt-1">
+                {warning || 'Displaying sample market data. Real-time data may not be available.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Market Indices */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {data.map((item, index) => (
+        {data.map((index, idx) => (
           <motion.div
-            key={item.name}
+            key={index.name}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            whileHover={{ scale: 1.02 }}
-            className="group"
+            transition={{ delay: idx * 0.1 }}
+            className="bg-black/20 border border-purple-800/30 backdrop-blur-sm rounded-lg p-4 hover:border-purple-500/50 transition-all duration-300"
           >
-            <Card className="bg-black/20 border-purple-800/30 hover:border-purple-500/50 transition-all duration-300 backdrop-blur-sm">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm text-white">{item.name}</CardTitle>
-                  <Badge 
-                    variant="outline" 
-                    className={`${
-                      item.changePercent >= 0 
-                        ? 'border-green-500/30 text-green-400 bg-green-500/10' 
-                        : 'border-red-500/30 text-red-400 bg-red-500/10'
-                    }`}
-                  >
-                    {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xl font-bold text-white">
-                      {item.value.toLocaleString()}
-                    </span>
-                    <div className={`flex items-center space-x-1 ${getChangeColor(item.change)}`}>
-                      {getChangeIcon(item.change)}
-                      <span className="text-sm">
-                        {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                  {item.volume && (
-                    <div className="text-xs text-gray-400">
-                      Volume: {item.volume}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-white font-semibold">{index.name}</h3>
+              <div className={`flex items-center space-x-1 ${getChangeColor(index.change)}`}>
+                {getChangeIcon(index.change)}
+                <span className="font-semibold">
+                  {index.change >= 0 ? '+' : ''}{index.changePercent.toFixed(2)}%
+                </span>
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white mb-1">
+              {index.value.toLocaleString()}
+            </div>
+            <div className="text-sm text-gray-400">
+              {index.change >= 0 ? '+' : ''}{index.change.toFixed(2)} ({index.volume})
+            </div>
           </motion.div>
         ))}
       </div>
@@ -147,16 +142,22 @@ export function MarketAnalysis({ data = defaultMarketData }: MarketAnalysisProps
           <CardTitle className="text-white flex items-center space-x-2">
             <BarChart3 className="w-5 h-5 text-purple-400" />
             <span>Sector Performance</span>
+            {!isRealData && (
+              <Badge variant="outline" className="text-xs border-orange-500/50 text-orange-400">
+                Sample Data
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {[
-              { name: 'Technology', change: 2.3, color: 'text-blue-400' },
-              { name: 'Healthcare', change: -0.8, color: 'text-green-400' },
-              { name: 'Financial', change: 1.2, color: 'text-yellow-400' },
-              { name: 'Energy', change: -1.1, color: 'text-red-400' },
-              { name: 'Consumer', change: 0.5, color: 'text-purple-400' }
+              { name: 'Technology', change: 1.8, color: 'text-blue-400' },
+              { name: 'Healthcare', change: -0.5, color: 'text-green-400' },
+              { name: 'Financial', change: 0.9, color: 'text-yellow-400' },
+              { name: 'Energy', change: -0.8, color: 'text-red-400' },
+              { name: 'Consumer', change: 0.3, color: 'text-purple-400' },
+              { name: 'Communication', change: 1.2, color: 'text-cyan-400' }
             ].map((sector, index) => (
               <motion.div
                 key={sector.name}

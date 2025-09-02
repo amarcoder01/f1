@@ -3,9 +3,22 @@ import { AITool } from '@/types'
 import { yfinanceAPI } from './yfinance-api'
 import { getStockData } from './multi-source-api'
 import { webSearch } from './web-search'
+import { universalKnowledgeTools } from './universal-knowledge-tools'
+import { enhancedReasoningTools } from './enhanced-reasoning-engine'
+import { enhancedMemoryTools } from './enhanced-memory-system'
 
 // Define AI tools for GPT-4o function calling
 export const tradingTools: AITool[] = [
+  // Universal Knowledge Tools
+  ...universalKnowledgeTools,
+  
+  // Enhanced Reasoning Tools
+  ...enhancedReasoningTools,
+  
+  // Enhanced Memory Tools
+  ...enhancedMemoryTools,
+  
+  // Original Trading Tools
   {
     type: 'function',
     function: {
@@ -102,6 +115,44 @@ export const tradingTools: AITool[] = [
   {
     type: 'function',
     function: {
+      name: 'generate_chart',
+      description: 'Generate interactive TradingView chart for any stock symbol. Use this when user asks for charts, graphs, or visual price data.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Stock symbol (e.g., AAPL, GOOGL, TSLA, SPY)'
+          },
+          timeframe: {
+            type: 'string',
+            description: 'Chart timeframe',
+            enum: ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y'],
+            default: '1mo'
+          },
+          chartType: {
+            type: 'string',
+            description: 'Type of chart to display',
+            enum: ['candlestick', 'line', 'area'],
+            default: 'candlestick'
+          },
+          indicators: {
+            type: 'array',
+            items: {
+              type: 'string',
+              enum: ['sma20', 'sma50', 'sma200', 'volume', 'rsi', 'macd']
+            },
+            description: 'Technical indicators to display',
+            default: ['sma20', 'volume']
+          }
+        },
+        required: ['symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'search_web',
       description: 'Search the web for charts, images, recent news, analysis, or information not available in real-time data. Use for charts, images, news, or information not in built-in tools.',
       parameters: {
@@ -125,16 +176,71 @@ export const tradingTools: AITool[] = [
     type: 'function',
     function: {
       name: 'get_market_news',
-      description: 'Get latest market news and financial updates. Use for recent news not available in real-time data.',
+      description: 'Get latest market news and financial updates with sentiment analysis. Use for recent news not available in real-time data.',
       parameters: {
         type: 'object',
         properties: {
-          topic: {
+          symbol: {
             type: 'string',
-            description: 'Specific topic or market to search for news about'
+            description: 'Stock symbol to get news for (e.g., AAPL, TSLA)'
+          },
+          category: {
+            type: 'string',
+            description: 'News category filter',
+            enum: ['all', 'earnings', 'market', 'product', 'leadership', 'regulatory']
+          },
+          limit: {
+            type: 'number',
+            description: 'Number of news articles to return',
+            default: 10
           }
         },
         required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_earnings_calendar',
+      description: 'Get upcoming earnings calendar and predictions. Use for earnings analysis and market timing.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: {
+            type: 'number',
+            description: 'Number of days to look ahead',
+            default: 30
+          },
+          symbols: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Specific stock symbols to filter for'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_news_sentiment',
+      description: 'Get sentiment analysis for specific stocks or market topics. Use for sentiment-based trading decisions.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Stock symbol to analyze sentiment for'
+          },
+          include_social: {
+            type: 'boolean',
+            description: 'Include social media sentiment',
+            default: true
+          }
+        },
+        required: ['symbol']
       }
     }
   },
@@ -484,6 +590,28 @@ export const tradingTools: AITool[] = [
 export class AIToolsExecutor {
   static async executeTool(toolName: string, args: any): Promise<string> {
     try {
+      // Check if it's a universal knowledge tool
+      const universalTool = universalKnowledgeTools.find(tool => tool.function?.name === toolName)
+      if (universalTool) {
+        const { UniversalKnowledgeExecutor } = await import('./universal-knowledge-tools')
+        return await UniversalKnowledgeExecutor.executeTool(toolName, args)
+      }
+
+      // Check if it's an enhanced reasoning tool
+      const reasoningTool = enhancedReasoningTools.find(tool => tool.function?.name === toolName)
+      if (reasoningTool) {
+        const { EnhancedReasoningExecutor } = await import('./enhanced-reasoning-engine')
+        return await EnhancedReasoningExecutor.executeTool(toolName, args)
+      }
+
+      // Check if it's an enhanced memory tool
+      const memoryTool = enhancedMemoryTools.find(tool => tool.function?.name === toolName)
+      if (memoryTool) {
+        const { EnhancedMemoryExecutor } = await import('./enhanced-memory-system')
+        return await EnhancedMemoryExecutor.executeTool(toolName, args)
+      }
+
+      // Handle existing trading tools
       switch (toolName) {
         case 'get_stock_quote':
           return await this.getStockQuote(args.symbol)

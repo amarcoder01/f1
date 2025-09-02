@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { YahooFinanceChartAPI } from '@/lib/yahoo-finance-chart-api'
+import { DataSourceService } from '@/lib/data-source-service'
 
 interface ChartDataPoint {
   time: number
@@ -40,42 +41,69 @@ export async function GET(
       if (result.success && result.data) {
         // Convert Yahoo Finance data to chart format
         const chartData = convertYahooFinanceToChartData(result.data, symbol)
-        console.log(`API: Successfully fetched ${chartData.length} data points for ${symbol}`)
+        console.log(`✅ Successfully fetched ${chartData.length} real data points for ${symbol}`)
         return NextResponse.json({
           success: true,
           data: chartData,
           source: 'yahoo_finance',
-          dataPoints: chartData.length
+          dataPoints: chartData.length,
+          isRealData: true,
+          timestamp: new Date().toISOString(),
+          warning: null
         })
       } else {
-        console.warn(`API: No chart data from Yahoo Finance for ${symbol}, using fallback`)
-        const fallbackData = generateFallbackData(symbol, range)
+        console.warn(`⚠️ No chart data from Yahoo Finance for ${symbol}, using fallback`)
+        const fallbackData = DataSourceService.generateChartFallbackData({
+          symbol,
+          timeframe: range,
+          dataType: 'chart'
+        })
         return NextResponse.json({
           success: true,
           data: fallbackData,
           source: 'fallback',
-          message: 'No data from Yahoo Finance API, using sample data'
+          dataPoints: fallbackData.length,
+          isRealData: false,
+          timestamp: new Date().toISOString(),
+          warning: 'Using simulated data - Yahoo Finance API returned no data',
+          message: 'No data from Yahoo Finance API, using simulated data'
         })
       }
     } catch (yahooError) {
-      console.error(`API: Yahoo Finance chart data failed for ${symbol}:`, yahooError)
-      const fallbackData = generateFallbackData(symbol, range)
+      console.error(`❌ Yahoo Finance chart data failed for ${symbol}:`, yahooError)
+      const fallbackData = DataSourceService.generateChartFallbackData({
+        symbol,
+        timeframe: range,
+        dataType: 'chart'
+      })
       return NextResponse.json({
         success: true,
         data: fallbackData,
         source: 'fallback',
+        dataPoints: fallbackData.length,
+        isRealData: false,
+        timestamp: new Date().toISOString(),
+        warning: 'Using simulated data - Yahoo Finance API failed',
         error: yahooError instanceof Error ? yahooError.message : 'Unknown error'
       })
     }
 
   } catch (error) {
-    console.error('API: Chart data error:', error)
-    const fallbackData = generateFallbackData(params.symbol, '1d')
+    console.error('❌ Chart data error:', error)
+    const fallbackData = DataSourceService.generateChartFallbackData({
+      symbol: params.symbol,
+      timeframe: '1d',
+      dataType: 'chart'
+    })
     return NextResponse.json({
       success: false,
       error: 'Internal server error',
       data: fallbackData,
-      source: 'fallback'
+      source: 'fallback',
+      dataPoints: fallbackData.length,
+      isRealData: false,
+      timestamp: new Date().toISOString(),
+      warning: 'Using simulated data - Internal server error'
     }, { status: 500 })
   }
 }
@@ -86,7 +114,11 @@ function convertYahooFinanceToChartData(yahooData: any, symbol: string): ChartDa
     const chartData = yahooData.chart
     if (!chartData || !chartData.result || !chartData.result[0]) {
       console.warn('Invalid Yahoo Finance data structure')
-      return generateFallbackData(symbol, '1d')
+      return DataSourceService.generateChartFallbackData({
+        symbol,
+        timeframe: '1d',
+        dataType: 'chart'
+      })
     }
 
     const result = chartData.result[0]
@@ -95,7 +127,11 @@ function convertYahooFinanceToChartData(yahooData: any, symbol: string): ChartDa
     
     if (!timestamps || !quotes) {
       console.warn('Missing timestamp or quote data')
-      return generateFallbackData(symbol, '1d')
+      return DataSourceService.generateChartFallbackData({
+        symbol,
+        timeframe: '1d',
+        dataType: 'chart'
+      })
     }
 
     const chartPoints: ChartDataPoint[] = []
@@ -126,92 +162,10 @@ function convertYahooFinanceToChartData(yahooData: any, symbol: string): ChartDa
     return chartPoints
   } catch (error) {
     console.error('Error converting Yahoo Finance data:', error)
-    return generateFallbackData(symbol, '1d')
-  }
-}
-
-// Generate fallback chart data
-function generateFallbackData(symbol: string, range: string): ChartDataPoint[] {
-  console.log(`Generating fallback data for ${symbol} (${range})`)
-  
-  // Base prices for known symbols
-  const basePrices: { [key: string]: number } = {
-    'AAPL': 180,
-    'MSFT': 380,
-    'GOOGL': 140,
-    'TSLA': 250,
-    'AMZN': 145,
-    'NVDA': 450,
-    'META': 300,
-    'NFLX': 400
-  }
-  
-  const basePrice = basePrices[symbol] || (100 + Math.random() * 400)
-  const dataPoints: ChartDataPoint[] = []
-  const now = Date.now()
-  
-  // Generate data points based on range
-  let numPoints = 100
-  let timeInterval = 24 * 60 * 60 * 1000 // 1 day
-  
-  switch (range) {
-    case '1d':
-      numPoints = 390 // Market minutes
-      timeInterval = 60 * 1000 // 1 minute
-      break
-    case '5d':
-      numPoints = 390 * 5
-      timeInterval = 60 * 1000
-      break
-    case '1mo':
-      numPoints = 30
-      timeInterval = 24 * 60 * 60 * 1000
-      break
-    case '3mo':
-      numPoints = 90
-      timeInterval = 24 * 60 * 60 * 1000
-      break
-    case '6mo':
-      numPoints = 180
-      timeInterval = 24 * 60 * 60 * 1000
-      break
-    case '1y':
-      numPoints = 252
-      timeInterval = 24 * 60 * 60 * 1000
-      break
-    case '5y':
-      numPoints = 1260
-      timeInterval = 24 * 60 * 60 * 1000
-      break
-  }
-  
-  let currentPrice = basePrice
-  
-  for (let i = 0; i < numPoints; i++) {
-    const time = now - (numPoints - i) * timeInterval
-    
-    // Random walk with slight upward bias
-    const volatility = 0.02
-    const change = (Math.random() - 0.48) * volatility
-    currentPrice = currentPrice * (1 + change)
-    
-    const high = currentPrice * (1 + Math.random() * 0.01)
-    const low = currentPrice * (1 - Math.random() * 0.01)
-    const open = currentPrice * (1 + (Math.random() - 0.5) * 0.005)
-    const close = currentPrice
-    const volume = Math.random() * 1000000 + 100000
-
-    dataPoints.push({
-      time,
-      open,
-      high,
-      low,
-      close,
-      volume,
-      change: close - open,
-      changePercent: ((close - open) / open) * 100
+    return DataSourceService.generateChartFallbackData({
+      symbol,
+      timeframe: '1d',
+      dataType: 'chart'
     })
   }
-  
-  return dataPoints
 }

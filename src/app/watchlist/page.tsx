@@ -46,8 +46,9 @@ export default function WatchlistPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoadingPopular, setIsLoadingPopular] = useState(false)
   const [loadingStocks, setLoadingStocks] = useState<Set<string>>(new Set())
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [hideInfoMessage, setHideInfoMessage] = useState(false)
-  const [refreshSuccess, setRefreshSuccess] = useState(false)
+  const [refreshSuccess, setRefreshSuccess] = useState<string | false>(false)
 
   // Get or create default watchlist
   const defaultWatchlist = watchlists?.find(w => w.name === 'My Watchlist') || {
@@ -380,10 +381,38 @@ export default function WatchlistPage() {
   const handleRemoveFromWatchlist = async (itemId: string) => {
     try {
       setError(null)
+      setRemovingItemId(itemId)
+      
+      console.log(`🗑️ UI: Removing item ${itemId} from watchlist...`)
+      
       await removeFromWatchlist(defaultWatchlist?.id || 'default', itemId)
+      
+      console.log(`✅ UI: Successfully removed item ${itemId} from watchlist`)
+      
+      // Show success message briefly
+      setRefreshSuccess('removed')
+      setTimeout(() => {
+        setRefreshSuccess(false)
+      }, 2000)
+      
     } catch (error) {
-      console.error('Error removing stock from watchlist:', error)
-      setError('Failed to remove stock from watchlist. Please try again.')
+      console.error('❌ UI: Error removing stock from watchlist:', error)
+      
+      let errorMessage = 'Failed to remove stock from watchlist. Please try again.'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          errorMessage = 'Stock not found in watchlist. It may have already been removed.'
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.'
+        } else if (error.message.includes('Failed to remove item')) {
+          errorMessage = error.message
+        }
+      }
+      
+      setError(errorMessage)
+    } finally {
+      setRemovingItemId(null)
     }
   }
 
@@ -446,7 +475,7 @@ export default function WatchlistPage() {
       
       // Show success message
       setError(null)
-      setRefreshSuccess(true)
+      setRefreshSuccess('refreshed')
       
       // Hide success message after 3 seconds
       setTimeout(() => {
@@ -512,7 +541,7 @@ export default function WatchlistPage() {
               </div>
             </div>
             <p className="text-green-700 dark:text-green-300 text-sm">
-              <strong>Refresh Complete!</strong> All stock data has been updated with the latest prices.
+              <strong>Success!</strong> {refreshSuccess === 'removed' ? 'Stock removed from watchlist successfully!' : refreshSuccess === 'refreshed' ? 'All stock data has been updated with the latest prices.' : 'Operation completed successfully!'}
             </p>
             <button 
               onClick={() => setRefreshSuccess(false)}
@@ -922,10 +951,15 @@ export default function WatchlistPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveFromWatchlist(item.id)}
-                        className="opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 transition-all h-8 w-8 p-0"
+                        disabled={removingItemId === item.id}
+                        className="opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 transition-all h-8 w-8 p-0 disabled:opacity-50"
                         title="Remove from watchlist"
                       >
-                        <X className="w-4 h-4" />
+                        {removingItemId === item.id ? (
+                          <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <X className="w-4 h-4" />
+                        )}
                       </Button>
                     </CardHeader>
                     <CardContent className="pt-0">

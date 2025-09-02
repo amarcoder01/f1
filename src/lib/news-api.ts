@@ -85,9 +85,10 @@ export class NewsService {
         }
       }
       
-      // 3. Fallback to mock data
+      // 3. Return empty array if no real data available
       if (news.length === 0) {
-        news = this.generateMockNews(symbol, limit)
+        console.log('⚠️ No real news data available - returning empty results')
+        return []
       }
       
       // Sort by relevance and recency
@@ -101,10 +102,10 @@ export class NewsService {
       console.log(`✅ Fetched ${news.length} news articles`)
       
       return news
-    } catch (error) {
-      console.error('❌ Error fetching news:', error)
-      return this.generateMockNews(symbol, limit)
-    }
+         } catch (error) {
+       console.error('❌ Error fetching news:', error)
+       return []
+     }
   }
 
   // Get earnings calendar
@@ -143,8 +144,8 @@ export class NewsService {
                   reportDate: new Date(reportDate),
                   estimate: parseFloat(estimate) || 0,
                   actual: parseFloat(actual) || null,
-                  prediction: this.generateEarningsPrediction(symbol, parseFloat(estimate) || 0),
-                  sentiment: this.generateEarningsSentiment(symbol)
+                  prediction: parseFloat(estimate) || 0,
+                  sentiment: { score: 0.5, label: 'neutral', confidence: 0.6 }
                 }
               })
           }
@@ -153,18 +154,19 @@ export class NewsService {
         }
       }
       
-      // Fallback to mock data
+      // If no real earnings data available, return empty array
       if (earnings.length === 0) {
-        earnings = this.generateMockEarnings(days)
+        console.log('⚠️ No real earnings data available - returning empty results')
+        return []
       }
       
       this.cache.set(cacheKey, { data: earnings, timestamp: Date.now() })
-      console.log(`✅ Fetched ${earnings.length} earnings events`)
+      console.log(`✅ Fetched ${earnings.length} real earnings events`)
       
       return earnings
     } catch (error) {
       console.error('❌ Error fetching earnings:', error)
-      return this.generateMockEarnings(days)
+      return []
     }
   }
 
@@ -180,16 +182,44 @@ export class NewsService {
     try {
       console.log(`📱 Fetching social media sentiment for ${symbol}...`)
       
-      // Mock social media sentiment (in real implementation, integrate with Twitter/Reddit APIs)
-      const sentiment = this.generateMockSocialSentiment(symbol)
+      // Try to get real social media sentiment from available APIs
+      let sentiment: SentimentScore | null = null
+      
+      // Try Finnhub sentiment if available
+      if (FINNHUB_API_KEY) {
+        try {
+          const response = await fetch(`https://finnhub.io/api/v1/stock/sentiment?symbol=${symbol}&from=2024-01-01&token=${FINNHUB_API_KEY}`)
+          if (response.ok) {
+            const data = await response.json()
+            if (data.reddit && data.twitter) {
+              const redditSentiment = data.reddit.reduce((acc: number, item: any) => acc + (item.sentiment || 0), 0) / data.reddit.length
+              const twitterSentiment = data.twitter.reduce((acc: number, item: any) => acc + (item.sentiment || 0), 0) / data.twitter.length
+              const avgSentiment = (redditSentiment + twitterSentiment) / 2
+              sentiment = {
+                score: avgSentiment,
+                label: avgSentiment > 0.1 ? 'positive' : avgSentiment < -0.1 ? 'negative' : 'neutral',
+                confidence: 0.8
+              }
+            }
+          }
+        } catch (error) {
+          console.log('❌ Finnhub sentiment failed:', error)
+        }
+      }
+      
+      // If no real sentiment available, return neutral
+      if (!sentiment) {
+        console.log('⚠️ No real social sentiment available - returning neutral')
+        sentiment = { score: 0, label: 'neutral', confidence: 0.5 }
+      }
       
       this.cache.set(cacheKey, { data: sentiment, timestamp: Date.now() })
-      console.log(`✅ Generated social sentiment for ${symbol}`)
+      console.log(`✅ Social sentiment for ${symbol}: ${sentiment.score.toFixed(3)} (${sentiment.label})`)
       
       return sentiment
     } catch (error) {
       console.error('❌ Error fetching social sentiment:', error)
-      return this.generateMockSocialSentiment(symbol)
+      return { score: 0, label: 'neutral', confidence: 0.5 }
     }
   }
 
@@ -298,96 +328,7 @@ export class NewsService {
     return { score, label, confidence }
   }
 
-  private static generateEarningsPrediction(symbol: string, estimate: number): number {
-    // Simple prediction based on historical patterns
-    const variations: { [key: string]: number } = {
-      'AAPL': 0.05, 'GOOGL': 0.03, 'MSFT': 0.04, 'TSLA': 0.15, 'AMZN': 0.08
-    }
-    
-    const variation = variations[symbol] || 0.05
-    return estimate * (1 + (Math.random() - 0.5) * variation)
-  }
 
-  private static generateEarningsSentiment(symbol: string): SentimentScore {
-    const sentiments: { [key: string]: SentimentScore } = {
-      'AAPL': { score: 0.7, label: 'positive', confidence: 0.8 },
-      'GOOGL': { score: 0.6, label: 'positive', confidence: 0.7 },
-      'MSFT': { score: 0.8, label: 'positive', confidence: 0.9 },
-      'TSLA': { score: 0.3, label: 'neutral', confidence: 0.6 },
-      'AMZN': { score: 0.5, label: 'positive', confidence: 0.7 }
-    }
-    
-    return sentiments[symbol] || { score: 0.5, label: 'neutral', confidence: 0.6 }
-  }
-
-  private static generateMockSocialSentiment(symbol: string): SentimentScore {
-    const baseSentiments: { [key: string]: number } = {
-      'AAPL': 0.6, 'GOOGL': 0.5, 'MSFT': 0.7, 'TSLA': 0.4, 'AMZN': 0.5
-    }
-    
-    const baseScore = baseSentiments[symbol] || 0.5
-    const score = baseScore + (Math.random() - 0.5) * 0.4 // Add some randomness
-    
-    let label: 'positive' | 'negative' | 'neutral' = 'neutral'
-    if (score > 0.6) label = 'positive'
-    else if (score < 0.4) label = 'negative'
-    
-    return { score, label, confidence: 0.7 + Math.random() * 0.3 }
-  }
-
-  private static generateMockNews(symbol?: string, limit: number = 20): NewsItem[] {
-    const mockNews = [
-      {
-        id: '1',
-        title: `${symbol || 'Tech'} Stocks Rally on Strong Earnings Reports`,
-        description: 'Major technology companies reported better-than-expected quarterly results, driving market optimism.',
-        content: 'The technology sector saw significant gains today as several major companies exceeded analyst expectations...',
-        url: '#',
-        imageUrl: 'https://via.placeholder.com/400x200/4F46E5/FFFFFF?text=Tech+Rally',
-        source: 'Financial Times',
-        publishedAt: new Date(Date.now() - Math.random() * 86400000),
-        sentiment: { score: 0.7, label: 'positive' as const, confidence: 0.8 },
-        relevance: 0.9,
-        category: 'Earnings'
-      },
-      {
-        id: '2',
-        title: 'Market Volatility Increases Amid Economic Uncertainty',
-        description: 'Investors remain cautious as economic indicators show mixed signals about future growth.',
-        content: 'Market volatility has increased significantly as investors weigh various economic factors...',
-        url: '#',
-        imageUrl: 'https://via.placeholder.com/400x200/DC2626/FFFFFF?text=Volatility',
-        source: 'Bloomberg',
-        publishedAt: new Date(Date.now() - Math.random() * 86400000),
-        sentiment: { score: -0.3, label: 'negative' as const, confidence: 0.6 },
-        relevance: 0.7,
-        category: 'Market'
-      }
-    ]
-    
-    return mockNews.slice(0, limit)
-  }
-
-  private static generateMockEarnings(days: number): EarningsEvent[] {
-    const companies = [
-      { symbol: 'AAPL', name: 'Apple Inc.' },
-      { symbol: 'GOOGL', name: 'Alphabet Inc.' },
-      { symbol: 'MSFT', name: 'Microsoft Corporation' },
-      { symbol: 'TSLA', name: 'Tesla, Inc.' },
-      { symbol: 'AMZN', name: 'Amazon.com, Inc.' }
-    ]
-    
-    return companies.map((company, index) => ({
-      id: `${company.symbol}_${index}`,
-      symbol: company.symbol,
-      companyName: company.name,
-      reportDate: new Date(Date.now() + (index + 1) * 86400000 * 7), // Weekly intervals
-      estimate: 2.50 + Math.random() * 3,
-      actual: null,
-      prediction: 2.50 + Math.random() * 3,
-      sentiment: this.generateEarningsSentiment(company.symbol)
-    }))
-  }
 }
 
 // Export singleton instance

@@ -37,6 +37,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { VidalityLogo } from '@/components/ui/VidalityLogo'
 import { AuthGuard } from '@/components/auth/AuthGuard'
+import { Footer } from '@/components/layout/Footer'
 import { useAuthStore } from '@/store'
 import { useRouter } from 'next/navigation'
 
@@ -421,54 +422,6 @@ const CTASection = ({ onOpenRegister }: { onOpenRegister: () => void }) => (
       </motion.div>
     </div>
   </section>
-)
-
-// Footer component
-const Footer = () => (
-  <footer className="py-12 px-4 border-t border-white/10">
-    <div className="max-w-7xl mx-auto">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-        <div>
-          <VidalityLogo className="h-8 w-auto text-white mb-4" />
-          <p className="text-gray-400 text-sm">
-            The future of trading is here. Advanced AI-powered platform for professional traders.
-          </p>
-        </div>
-        <div>
-          <h3 className="text-white font-semibold mb-4">Platform</h3>
-          <ul className="space-y-2 text-sm text-gray-400">
-            <li><a href="#" className="hover:text-white transition-colors">Features</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">API</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Documentation</a></li>
-          </ul>
-        </div>
-        <div>
-          <h3 className="text-white font-semibold mb-4">Company</h3>
-          <ul className="space-y-2 text-sm text-gray-400">
-            <li><a href="#" className="hover:text-white transition-colors">About</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Press</a></li>
-          </ul>
-        </div>
-        <div>
-          <h3 className="text-white font-semibold mb-4">Support</h3>
-          <ul className="space-y-2 text-sm text-gray-400">
-            <li><a href="#" className="hover:text-white transition-colors">Help Center</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Status</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Security</a></li>
-          </ul>
-        </div>
-      </div>
-      <div className="border-t border-white/10 mt-8 pt-8 text-center">
-        <p className="text-gray-400 text-sm">
-          © 2024 Vidality. All rights reserved. | Privacy Policy | Terms of Service
-        </p>
-      </div>
-    </div>
-  </footer>
 )
 
 function LandingPageContent() {

@@ -9,6 +9,23 @@ const nextConfig = {
       ...config.resolve.fallback,
       fs: false,
     };
+    
+    // Handle pdf-parse build issues
+    config.module.rules.push({
+      test: /\.node$/,
+      use: 'raw-loader',
+    });
+    
+    // Ignore test files from pdf-parse
+    config.resolve.alias = {
+      ...config.resolve.alias,
+    };
+    
+    config.externals = config.externals || [];
+    config.externals.push({
+      'pdf-parse': 'commonjs pdf-parse',
+    });
+    
     return config;
   },
   // Production optimizations
@@ -16,7 +33,7 @@ const nextConfig = {
   poweredByHeader: false,
   generateEtags: false,
   // Static export settings for Render
-  trailingSlash: true,
+  // trailingSlash: true, // Temporarily disabled for API testing
   // Environment variables are handled by Next.js automatically
   // Headers for security
   async headers() {
@@ -42,4 +59,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig 
+module.exports = nextConfig

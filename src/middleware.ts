@@ -36,7 +36,8 @@ export function middleware(request: NextRequest) {
     '/api/user/',
     '/api/watchlist/',
     '/api/paper-trading/',
-    '/api/price-alerts/'
+    '/api/price-alerts/',
+    '/api/portfolio/'
   ]
 
   const isProtectedRoute = protectedRoutes.some(route => 

@@ -71,6 +71,8 @@ export function PortfolioPerformanceChart({ account, realTimeData, timeframe }: 
   const [chartType, setChartType] = useState<'line' | 'area' | 'bar'>('line')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isRealData, setIsRealData] = useState(true)
+  const [dataWarning, setDataWarning] = useState<string | null>(null)
 
   // Generate mock performance data based on timeframe
   const generatePerformanceData = useMemo(() => {
@@ -128,8 +130,12 @@ export function PortfolioPerformanceChart({ account, realTimeData, timeframe }: 
       })
     }
 
+    // Set warning for simulated data
+    setIsRealData(false)
+    setDataWarning('Portfolio performance data is simulated. Real trading data will appear after making trades.')
+
     return data
-  }, [timeframe, account.initialBalance])
+  }, [account.initialBalance, timeframe])
 
   // Generate sector allocation data
   const generateSectorData = useMemo(() => {
@@ -351,6 +357,21 @@ export function PortfolioPerformanceChart({ account, realTimeData, timeframe }: 
 
   return (
     <div className="space-y-6">
+      {/* Data Source Warning */}
+      {!isRealData && dataWarning && (
+        <div className="bg-orange-600/20 border border-orange-500/30 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <div className="w-5 h-5 text-orange-400 mt-0.5">⚠️</div>
+            <div>
+              <h4 className="font-medium text-orange-200">Portfolio Data Notice</h4>
+              <p className="text-orange-300 text-sm mt-1">
+                {dataWarning}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Chart Controls */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">

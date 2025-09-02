@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { 
   User, 
   Bot, 
@@ -10,33 +10,31 @@ import {
   TrendingUp, 
   TrendingDown, 
   AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Info,
-  BarChart3,
-  Calculator,
   Shield,
-  Zap,
-  Eye,
-  EyeOff,
-  ExternalLink,
-  MessageSquare,
-  ThumbsUp,
-  ThumbsDown
+  Brain,
+  Target,
+  Clock,
+  Star,
+  AlertCircle,
+  CheckCircle,
+  Info,
+  Zap
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AIChatMessage } from '@/types'
 import ReactMarkdown from 'react-markdown'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface EnhancedChatMessageProps {
   message: AIChatMessage
   onCopy?: (content: string) => void
   isStreaming?: boolean
   streamContent?: string
-  onFeedback?: (messageId: string, feedback: 'positive' | 'negative') => void
-  onAction?: (action: string, data?: any) => void
+  showMemory?: boolean
+  showGuardrails?: boolean
+  userPreferences?: any
 }
 
 export function EnhancedChatMessage({ 
@@ -44,18 +42,17 @@ export function EnhancedChatMessage({
   onCopy, 
   isStreaming = false, 
   streamContent = '',
-  onFeedback,
-  onAction
+  showMemory = true,
+  showGuardrails = true,
+  userPreferences
 }: EnhancedChatMessageProps) {
   const [displayContent, setDisplayContent] = useState(message.content)
-  const [isExpanded, setIsExpanded] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
-  const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null)
-  
   const isUser = message.role === 'user'
   const hasToolCalls = message.toolCalls && message.toolCalls.length > 0
   const hasToolResults = message.toolResults && message.toolResults.length > 0
-  const hasMetadata = message.metadata && Object.keys(message.metadata).length > 0
+  const hasGuardrails = false // message.metadata?.guardrails - not available in current interface
+  const hasMemory = false // message.metadata?.memory - not available in current interface
 
   // Handle streaming content updates
   useEffect(() => {
@@ -74,15 +71,6 @@ export function EnhancedChatMessage({
     }
   }
 
-  const handleFeedback = (type: 'positive' | 'negative') => {
-    setFeedback(type)
-    onFeedback?.(message.id, type)
-  }
-
-  const handleAction = (action: string, data?: any) => {
-    onAction?.(action, data)
-  }
-
   const getConfidenceColor = (confidence?: number) => {
     if (!confidence) return 'bg-gray-500'
     if (confidence >= 80) return 'bg-green-500'
@@ -94,172 +82,32 @@ export function EnhancedChatMessage({
     switch (riskLevel) {
       case 'low': return 'bg-green-100 text-green-800 border-green-200'
       case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'high': return 'bg-red-100 text-red-800 border-red-200'
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200'
+      case 'critical': return 'bg-red-100 text-red-800 border-red-200'
       default: return 'bg-gray-100 text-gray-800 border-gray-200'
     }
   }
 
-  const getResponseTypeIcon = (responseType?: string) => {
-    switch (responseType) {
-      case 'chart': return <BarChart3 className="w-4 h-4" />
-      case 'table': return <Calculator className="w-4 h-4" />
-      case 'code': return <Zap className="w-4 h-4" />
-      case 'alert': return <AlertTriangle className="w-4 h-4" />
-      case 'strategy': return <Shield className="w-4 h-4" />
-      default: return <MessageSquare className="w-4 h-4" />
+  const getGuardrailIcon = (type: string) => {
+    switch (type) {
+      case 'risk': return <AlertTriangle className="w-4 h-4" />
+      case 'compliance': return <Shield className="w-4 h-4" />
+      case 'safety': return <CheckCircle className="w-4 h-4" />
+      case 'content': return <Info className="w-4 h-4" />
+      case 'rate': return <Clock className="w-4 h-4" />
+      case 'protection': return <Shield className="w-4 h-4" />
+      default: return <Info className="w-4 h-4" />
     }
   }
 
-  const renderToolCalls = () => {
-    if (!hasToolCalls) return null
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, height: 0 }}
-        animate={{ opacity: 1, height: 'auto' }}
-        className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg"
-      >
-        <div className="flex items-center space-x-2 mb-2">
-          <TrendingUp className="w-4 h-4 text-blue-600" />
-          <span className="text-sm font-medium text-blue-700">Fetching Data...</span>
-        </div>
-        <div className="space-y-1">
-          {message.toolCalls?.map((toolCall, index) => (
-            <div key={index} className="text-xs text-blue-600">
-              • {toolCall.function?.name || 'Unknown tool'}
-            </div>
-          ))}
-        </div>
-      </motion.div>
-    )
-  }
-
-  const renderToolResults = () => {
-    if (!hasToolResults) return null
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, height: 0 }}
-        animate={{ opacity: 1, height: 'auto' }}
-        className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg"
-      >
-        <div className="flex items-center space-x-2 mb-2">
-          <CheckCircle className="w-4 h-4 text-green-600" />
-          <span className="text-sm font-medium text-green-700">Data Retrieved</span>
-        </div>
-        <div className="space-y-1">
-          {message.toolResults?.map((result, index) => (
-            <div key={index} className="text-xs text-green-600">
-              • {result.toolCallId} - {result.content.substring(0, 50)}...
-            </div>
-          ))}
-        </div>
-      </motion.div>
-    )
-  }
-
-  const renderMetadata = () => {
-    if (!hasMetadata) return null
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, height: 0 }}
-        animate={{ opacity: 1, height: 'auto' }}
-        className="mt-2 space-y-2"
-      >
-        {/* Confidence Indicator */}
-        {message.metadata?.confidence && (
-          <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${getConfidenceColor(message.metadata.confidence)}`} />
-            <span className="text-xs text-muted-foreground">
-              {message.metadata.confidence}% confidence
-            </span>
-          </div>
-        )}
-
-        {/* Risk Level Badge */}
-        {message.metadata?.riskLevel && (
-          <Badge variant="outline" className={`text-xs ${getRiskLevelColor(message.metadata.riskLevel)}`}>
-            {message.metadata.riskLevel} risk
-          </Badge>
-        )}
-
-        {/* Response Type Badge */}
-        {message.metadata?.responseType && message.metadata.responseType !== 'text' && (
-          <Badge variant="outline" className="text-xs flex items-center space-x-1">
-            {getResponseTypeIcon(message.metadata.responseType)}
-            <span>{message.metadata.responseType}</span>
-          </Badge>
-        )}
-
-        {/* Timeframe */}
-        {message.metadata?.timeframe && (
-          <Badge variant="outline" className="text-xs">
-            {message.metadata.timeframe}
-          </Badge>
-        )}
-      </motion.div>
-    )
-  }
-
-  const renderInteractiveElements = () => {
-    if (isUser) return null
-
-    const elements: React.ReactNode[] = []
-
-    // Add chart button if response contains chart data
-    if (displayContent.toLowerCase().includes('chart') || displayContent.toLowerCase().includes('technical')) {
-      elements.push(
-        <Button
-          key="chart"
-          variant="outline"
-          size="sm"
-          onClick={() => handleAction('show_chart', { symbol: 'AAPL' })}
-          className="text-xs"
-        >
-          <BarChart3 className="w-3 h-3 mr-1" />
-          View Chart
-        </Button>
-      )
+  const getGuardrailColor = (severity: string) => {
+    switch (severity) {
+      case 'low': return 'text-blue-600 bg-blue-50 border-blue-200'
+      case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200'
+      case 'high': return 'text-orange-600 bg-orange-50 border-orange-200'
+      case 'critical': return 'text-red-600 bg-red-50 border-red-200'
+      default: return 'text-gray-600 bg-gray-50 border-gray-200'
     }
-
-    // Add analysis button if response contains analysis
-    if (displayContent.toLowerCase().includes('analysis') || displayContent.toLowerCase().includes('indicator')) {
-      elements.push(
-        <Button
-          key="analysis"
-          variant="outline"
-          size="sm"
-          onClick={() => handleAction('deep_analysis', { content: displayContent })}
-          className="text-xs"
-        >
-          <Calculator className="w-3 h-3 mr-1" />
-          Deep Analysis
-        </Button>
-      )
-    }
-
-    // Add strategy button if response contains strategy
-    if (displayContent.toLowerCase().includes('strategy') || displayContent.toLowerCase().includes('trade')) {
-      elements.push(
-        <Button
-          key="strategy"
-          variant="outline"
-          size="sm"
-          onClick={() => handleAction('backtest_strategy', { content: displayContent })}
-          className="text-xs"
-        >
-          <Shield className="w-3 h-3 mr-1" />
-          Backtest
-        </Button>
-      )
-    }
-
-    return elements.length > 0 ? (
-      <div className="flex flex-wrap gap-2 mt-3">
-        {elements}
-      </div>
-    ) : null
   }
 
   return (
@@ -268,7 +116,7 @@ export function EnhancedChatMessage({
       animate={{ opacity: 1, y: 0 }}
       className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
     >
-      <div className={`flex items-start space-x-3 max-w-[85%] ${
+      <div className={`flex items-start space-x-3 max-w-[90%] ${
         isUser ? 'flex-row-reverse space-x-reverse' : ''
       }`}>
         {/* Avatar */}
@@ -325,17 +173,39 @@ export function EnhancedChatMessage({
             </div>
           )}
 
-          {/* Tool Calls */}
-          {renderToolCalls()}
+          {/* Tool Calls Indicator */}
+          {hasToolCalls && (
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+              <div className="flex items-center space-x-2">
+                <Zap className="w-3 h-3 text-blue-600" />
+                <span className="text-blue-700">Fetching real-time data...</span>
+              </div>
+            </div>
+          )}
 
           {/* Tool Results */}
-          {renderToolResults()}
+          {hasToolResults && (
+            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs">
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="w-3 h-3 text-green-600" />
+                <span className="text-green-700">Data retrieved successfully</span>
+              </div>
+            </div>
+          )}
 
-          {/* Metadata */}
-          {renderMetadata()}
+          {/* Guardrails Display - Disabled for now */}
+          {/* {showGuardrails && hasGuardrails && !isUser && (
+            <div className="mt-3 space-y-2">
+              Guardrails functionality not available in current interface
+            </div>
+          )} */}
 
-          {/* Interactive Elements */}
-          {renderInteractiveElements()}
+          {/* Memory Context Display - Disabled for now */}
+          {/* {showMemory && hasMemory && !isUser && (
+            <div className="mt-3 p-2 bg-purple-50 border border-purple-200 rounded text-xs">
+              Memory functionality not available in current interface
+            </div>
+          )} */}
 
           {/* Message Footer */}
           <div className="flex items-center justify-between mt-3 text-xs">
@@ -343,12 +213,74 @@ export function EnhancedChatMessage({
               <span className={isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}>
                 {message.timestamp.toLocaleTimeString()}
               </span>
+
+              {/* Confidence Indicator */}
+              {message.metadata?.confidence && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <div className="flex items-center space-x-1">
+                        <div className={`w-2 h-2 rounded-full ${getConfidenceColor(message.metadata.confidence)}`} />
+                        <span className={isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}>
+                          {message.metadata.confidence}%
+                        </span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>AI Confidence Level</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+
+              {/* Risk Level Badge */}
+              {message.metadata?.riskLevel && (
+                <Badge variant="outline" className={`text-xs ${getRiskLevelColor(message.metadata.riskLevel)}`}>
+                  {message.metadata.riskLevel} risk
+                </Badge>
+              )}
+
+              {/* Response Type Badge */}
+              {message.metadata?.responseType && message.metadata.responseType !== 'text' && (
+                <Badge variant="outline" className="text-xs">
+                  {message.metadata.responseType}
+                </Badge>
+              )}
+
+              {/* Memory Indicator - Disabled for now */}
+              {/* {hasMemory && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Brain className="w-3 h-3 text-purple-500" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Personalized with memory</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )} */}
+
+              {/* Guardrail Indicator - Disabled for now */}
+              {/* {hasGuardrails && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Shield className={`w-3 h-3 ${
+                        hasGuardrails.passed ? 'text-green-500' : 'text-red-500'
+                      }`} />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{hasGuardrails.passed ? 'Safety check passed' : 'Safety check failed'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )} */}
             </div>
 
             {/* Action Buttons */}
             {!isUser && (
               <div className="flex items-center space-x-1">
-                {/* Copy Button */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -357,57 +289,9 @@ export function EnhancedChatMessage({
                 >
                   <Copy className="w-3 h-3" />
                 </Button>
-
-                {/* Feedback Buttons */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleFeedback('positive')}
-                  className={`h-6 w-6 p-0 ${feedback === 'positive' ? 'text-green-500' : 'opacity-60 hover:opacity-100'}`}
-                >
-                  <ThumbsUp className="w-3 h-3" />
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleFeedback('negative')}
-                  className={`h-6 w-6 p-0 ${feedback === 'negative' ? 'text-red-500' : 'opacity-60 hover:opacity-100'}`}
-                >
-                  <ThumbsDown className="w-3 h-3" />
-                </Button>
-
-                {/* Details Toggle */}
-                {hasMetadata && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowDetails(!showDetails)}
-                    className="h-6 w-6 p-0 opacity-60 hover:opacity-100"
-                  >
-                    {showDetails ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                  </Button>
-                )}
               </div>
             )}
           </div>
-
-          {/* Expanded Details */}
-          <AnimatePresence>
-            {showDetails && hasMetadata && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-3 p-3 bg-muted/50 rounded-lg"
-              >
-                <h4 className="text-xs font-semibold mb-2">Message Details</h4>
-                <pre className="text-xs text-muted-foreground overflow-auto">
-                  {JSON.stringify(message.metadata, null, 2)}
-                </pre>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       </div>
     </motion.div>

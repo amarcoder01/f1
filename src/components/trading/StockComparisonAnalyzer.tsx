@@ -35,9 +35,21 @@ import {
   Maximize2,
   Settings,
   Eye,
-  RefreshCw
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Crown,
+  Shield,
+  Trash2
 } from 'lucide-react'
-import { PriceChart, ComparisonChart, TechnicalIndicatorsChart, VolumeAnalysisChart } from '@/components/charts/AdvancedStockCharts'
+import { AnalysisTableRenderer } from './AnalysisTableRenderer'
+import { useRealTimeComparison, usePriceChangeIndicator } from '@/hooks/useRealTimeComparison'
+import { RealTimePriceDisplay, RealTimeVolumeDisplay, RealTimeMarketCapDisplay } from './RealTimePriceDisplay'
+import { useMultipleStockDetails } from '@/hooks/useStockDetails'
+import { useMarketInsights } from '@/hooks/useMarketInsights'
+import { FinancialMetricsDisplay } from './FinancialMetricsDisplay'
+import { cn } from '@/lib/utils'
+import { UserDataService } from '@/lib/user-data-service'
 
 interface StockData {
   symbol: string
@@ -46,10 +58,10 @@ interface StockData {
   change: number
   changePercent: number
   marketCap: number
-  pe: number
+  pe: number | null // Allow null for missing P/E data
   volume: number
   dividendYield: number
-  beta: number
+  beta: number | null // Allow null for missing Beta data
   high52Week: number
   low52Week: number
   sector: string
@@ -98,20 +110,134 @@ export default function StockComparisonAnalyzer() {
   const [customPrompt, setCustomPrompt] = useState('')
   const [savedSessions, setSavedSessions] = useState<ComparisonSession[]>([])
   const [activeTab, setActiveTab] = useState('comparison')
-  const [chartPeriod, setChartPeriod] = useState('1d')
+  const [realTimeEnabled, setRealTimeEnabled] = useState(true)
+  const [selectedStockForDetails, setSelectedStockForDetails] = useState<string | null>(null)
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false)
+  const [isSavingSession, setIsSavingSession] = useState(false)
 
-  // Load saved sessions on component mount
+  // Real-time comparison hook
+  const {
+    data: realTimeData,
+    isConnected,
+    lastUpdate: lastUpdateTime,
+    getSymbolData,
+    refreshAll
+  } = useRealTimeComparison({
+    symbols: selectedStocks.map(stock => stock.symbol),
+    enabled: realTimeEnabled && (activeTab === 'comparison' || activeTab === 'compare'),
+    onUpdate: (symbol, data) => {
+      // Update the selected stocks with real-time data while preserving all other fields
+      setSelectedStocks(prevStocks => 
+        prevStocks.map(stock => 
+          stock.symbol === symbol 
+            ? {
+                ...stock, // Preserve all existing fields (marketCap, pe, beta, etc.)
+                price: data.price,
+                change: data.change,
+                changePercent: data.changePercent,
+                volume: data.volume || stock.volume, // Use real-time volume if available, otherwise keep existing
+                // Preserve all other fields like marketCap, pe, beta, dividendYield, etc.
+              }
+            : stock
+        )
+      )
+    }
+  })
+
+  // Detailed stock data hook
+  const { data: detailedStockData, loading: detailedDataLoading } = useMultipleStockDetails(
+    selectedStocks.map(stock => stock.symbol)
+  )
+
+  // Market insights hook
+  const { insights: marketInsights, loading: insightsLoading, error: insightsError } = useMarketInsights()
+
+  // Load saved sessions from database on component mount
   useEffect(() => {
+    loadSavedSessions()
+  }, [])
+
+  const loadSavedSessions = async () => {
+    setIsLoadingSessions(true)
+    try {
+      const response = await fetch('/api/sessions')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setSavedSessions(data.sessions)
+        } else {
+          throw new Error(data.error || 'Failed to load sessions')
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}: Failed to load sessions`)
+      }
+    } catch (error) {
+      console.error('Error loading saved sessions:', error)
+      // Fallback to localStorage if database fails
     const saved = localStorage.getItem('stockComparisonSessions')
     if (saved) {
       setSavedSessions(JSON.parse(saved))
     }
-  }, [])
+    } finally {
+      setIsLoadingSessions(false)
+    }
+  }
 
-  // Save sessions to localStorage
-  useEffect(() => {
-    localStorage.setItem('stockComparisonSessions', JSON.stringify(savedSessions))
-  }, [savedSessions])
+  const saveSessionToDatabase = async (session: ComparisonSession) => {
+    setIsSavingSession(true)
+    try {
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setSavedSessions(data.sessions)
+        } else {
+          throw new Error(data.error || 'Failed to save session')
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}: Failed to save session`)
+      }
+    } catch (error) {
+      console.error('Error saving session to database:', error)
+      // Fallback to localStorage if database fails
+      const currentSessions = [...savedSessions, session]
+      setSavedSessions(currentSessions)
+      localStorage.setItem('stockComparisonSessions', JSON.stringify(currentSessions))
+    } finally {
+      setIsSavingSession(false)
+    }
+  }
+
+  const deleteSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setSavedSessions(data.sessions)
+          // Also update localStorage as fallback
+          localStorage.setItem('stockComparisonSessions', JSON.stringify(data.sessions))
+        } else {
+          throw new Error(data.error || 'Failed to delete session')
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}: Failed to delete session`)
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error)
+      alert('Error deleting session')
+    }
+  }
 
   const searchStocks = async () => {
     if (!searchQuery.trim()) return
@@ -129,15 +255,16 @@ export default function StockComparisonAnalyzer() {
             change: data.data.change || 0,
             changePercent: data.data.changePercent || 0,
             marketCap: data.data.marketCap || 0,
-            pe: data.data.pe || 0,
+            pe: data.data.pe || null, // Use null for missing P/E data
             volume: data.data.volume || 0,
             dividendYield: data.data.dividendYield || 0,
-            beta: data.data.beta || 0,
+            beta: data.data.beta || null, // Use null for missing Beta data
             high52Week: data.data.high52Week || 0,
             low52Week: data.data.low52Week || 0,
             sector: data.data.sector || 'Unknown',
             industry: data.data.industry || 'Unknown'
           }
+
           setSearchResults([stockData])
         } else {
           setSearchResults([])
@@ -156,7 +283,7 @@ export default function StockComparisonAnalyzer() {
   const loadEnhancedData = async (symbol: string) => {
     setIsLoadingEnhancedData(true)
     try {
-      const response = await fetch(`/api/market-data/enhanced?symbol=${encodeURIComponent(symbol)}&period=${chartPeriod}`)
+      const response = await fetch(`/api/market-data/enhanced?symbol=${encodeURIComponent(symbol)}&period=1mo`)
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
@@ -185,10 +312,26 @@ export default function StockComparisonAnalyzer() {
     if (!selectedStocks.find(s => s.symbol === stock.symbol)) {
       // Load enhanced data for the stock
       const enhancedData = await loadEnhancedData(stock.symbol)
-      const stockWithData = {
-        ...stock,
-        ...enhancedData
+      
+      // Ensure consistent data structure with proper defaults
+      const stockWithData: StockData = {
+        symbol: stock.symbol,
+        name: stock.name || stock.symbol,
+        price: stock.price || 0,
+        change: stock.change || 0,
+        changePercent: stock.changePercent || 0,
+        marketCap: stock.marketCap || 0,
+        pe: stock.pe, // Keep null if not available
+        volume: stock.volume || 0,
+        dividendYield: stock.dividendYield || 0,
+        beta: stock.beta, // Keep null if not available
+        high52Week: stock.high52Week || 0,
+        low52Week: stock.low52Week || 0,
+        sector: stock.sector || 'Unknown',
+        industry: stock.industry || 'Unknown',
+        ...enhancedData // Add enhanced data (historical, technical, etc.)
       }
+
       setSelectedStocks([...selectedStocks, stockWithData])
     }
     setSearchQuery('')
@@ -199,24 +342,215 @@ export default function StockComparisonAnalyzer() {
     setSelectedStocks(selectedStocks.filter(s => s.symbol !== symbol))
   }
 
+  const exportAnalysis = () => {
+    if (!analysisResult) return
+
+    // Create a formatted text version for better readability
+    const formattedText = `
+STOCK COMPARISON ANALYSIS
+${'='.repeat(50)}
+
+Generated: ${new Date().toLocaleString()}
+Stocks Analyzed: ${selectedStocks.map(s => `${s.symbol} (${s.name})`).join(', ')}
+
+${customPrompt ? `Custom Prompt: ${customPrompt}\n` : ''}
+
+STOCK PRICES:
+${selectedStocks.map(s => `${s.symbol}: $${s.price} (${s.change >= 0 ? '+' : ''}${s.changePercent.toFixed(2)}%)`).join('\n')}
+
+${'='.repeat(50)}
+
+FUNDAMENTAL ANALYSIS:
+${analysisResult.fundamental}
+
+${'='.repeat(50)}
+
+TECHNICAL ANALYSIS:
+${analysisResult.technical}
+
+${'='.repeat(50)}
+
+RISK ASSESSMENT:
+${analysisResult.risk}
+
+${'='.repeat(50)}
+
+COMPETITIVE ANALYSIS:
+${analysisResult.competitive}
+
+${'='.repeat(50)}
+
+INVESTMENT RECOMMENDATION:
+${analysisResult.recommendation}
+
+Confidence Level: ${analysisResult.confidence}%
+
+${'='.repeat(50)}
+    `.trim()
+
+    // Create both JSON and text versions
+    const analysisData = {
+      timestamp: new Date().toISOString(),
+      stocks: selectedStocks.map(s => ({
+        symbol: s.symbol,
+        name: s.name,
+        price: s.price,
+        change: s.change,
+        changePercent: s.changePercent
+      })),
+      analysis: analysisResult,
+      customPrompt: customPrompt || 'No custom prompt'
+    }
+
+    // Export as text file (more readable)
+    const textBlob = new Blob([formattedText], {
+      type: 'text/plain'
+    })
+    
+    const textUrl = URL.createObjectURL(textBlob)
+    const textLink = document.createElement('a')
+    textLink.href = textUrl
+    textLink.download = `stock-analysis-${selectedStocks.map(s => s.symbol).join('-')}-${new Date().toISOString().split('T')[0]}.txt`
+    document.body.appendChild(textLink)
+    textLink.click()
+    document.body.removeChild(textLink)
+    URL.revokeObjectURL(textUrl)
+
+    // Also export as JSON for programmatic use
+    const jsonBlob = new Blob([JSON.stringify(analysisData, null, 2)], {
+      type: 'application/json'
+    })
+    
+    const jsonUrl = URL.createObjectURL(jsonBlob)
+    const jsonLink = document.createElement('a')
+    jsonLink.href = jsonUrl
+    jsonLink.download = `stock-analysis-${selectedStocks.map(s => s.symbol).join('-')}-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(jsonLink)
+    jsonLink.click()
+    document.body.removeChild(jsonLink)
+    URL.revokeObjectURL(jsonUrl)
+  }
+
+  const shareAnalysis = async () => {
+    if (!analysisResult) return
+
+    const shareData = {
+      title: 'Stock Comparison Analysis',
+      text: `AI-powered analysis of ${selectedStocks.map(s => s.symbol).join(', ')} stocks`,
+      url: window.location.href
+    }
+
+    // Try to use native Web Share API if available
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData)
+      } catch (error) {
+        console.log('Share cancelled or failed:', error)
+        // Fallback to clipboard if share is cancelled
+        await copyToClipboard()
+      }
+    } else {
+      // Fallback: copy to clipboard
+      await copyToClipboard()
+    }
+  }
+
+  const copyToClipboard = async () => {
+    if (!analysisResult) return
+
+    const analysisText = `
+📊 STOCK COMPARISON ANALYSIS
+${selectedStocks.map(s => s.symbol).join(' vs ')}
+
+📅 Generated: ${new Date().toLocaleString()}
+
+💰 Stock Prices:
+${selectedStocks.map(s => `${s.symbol}: $${s.price} (${s.change >= 0 ? '+' : ''}${s.changePercent.toFixed(2)}%)`).join('\n')}
+
+📈 FUNDAMENTAL ANALYSIS:
+${analysisResult.fundamental}
+
+📊 TECHNICAL ANALYSIS:
+${analysisResult.technical}
+
+⚠️ RISK ASSESSMENT:
+${analysisResult.risk}
+
+🎯 COMPETITIVE ANALYSIS:
+${analysisResult.competitive}
+
+💡 INVESTMENT RECOMMENDATION:
+${analysisResult.recommendation}
+
+🎯 Confidence Level: ${analysisResult.confidence}%
+
+Generated by AI-Powered Stock Analysis Tool
+    `.trim()
+
+    try {
+      await navigator.clipboard.writeText(analysisText)
+      alert('✅ Analysis copied to clipboard! You can now paste it anywhere.')
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+      
+      // Fallback: create a temporary textarea
+      const textarea = document.createElement('textarea')
+      textarea.value = analysisText
+      document.body.appendChild(textarea)
+      textarea.select()
+      
+      try {
+        document.execCommand('copy')
+        alert('✅ Analysis copied to clipboard! You can now paste it anywhere.')
+      } catch (fallbackError) {
+        console.error('Fallback copy failed:', fallbackError)
+        alert('❌ Failed to copy to clipboard. Please manually select and copy the analysis text.')
+      }
+      
+      document.body.removeChild(textarea)
+    }
+  }
+
     const generateAIAnalysis = async () => {
-    if (selectedStocks.length < 2) {
-      alert('Please select at least 2 stocks for comparison')
+    if (selectedStocks.length === 0) {
+      alert('Please select at least one stock to analyze')
       return
     }
 
     setIsAnalyzing(true)
     try {
-      // Call real AI analysis API
+      // Get the most up-to-date real-time data for analysis
+      const realTimeStockData = selectedStocks.map(stock => {
+        const realtimeData = getSymbolData(stock.symbol)
+        
+        // Use real-time data if available, otherwise fall back to selected stock data
+        return {
+          symbol: stock.symbol,
+          name: stock.name,
+          price: realtimeData?.price || stock.price,
+          change: realtimeData?.change || stock.change,
+          changePercent: realtimeData?.changePercent || stock.changePercent,
+          marketCap: stock.marketCap,
+          pe: stock.pe,
+          volume: realtimeData?.volume || stock.volume,
+          dividendYield: stock.dividendYield,
+          beta: stock.beta,
+          sector: stock.sector,
+          industry: stock.industry
+        }
+      })
+
+      console.log('Using real-time data for AI analysis:', realTimeStockData)
+
       const response = await fetch('/api/ai-analysis', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          stocks: selectedStocks,
+          stocks: realTimeStockData,
           customPrompt
-        })
+        }),
       })
 
       if (response.ok) {
@@ -224,7 +558,7 @@ export default function StockComparisonAnalyzer() {
         if (data.success) {
           setAnalysisResult(data.data)
           
-          // Save session
+          // Save session to database
           const session: ComparisonSession = {
             id: Date.now().toString(),
             stocks: selectedStocks,
@@ -232,16 +566,27 @@ export default function StockComparisonAnalyzer() {
             timestamp: new Date().toISOString(),
             customPrompt
           }
-          setSavedSessions([session, ...savedSessions])
+          await saveSessionToDatabase(session)
+          
+          console.log('Analysis completed successfully')
         } else {
+          console.error('API returned error:', data.error)
           throw new Error(data.error || 'Failed to generate analysis')
         }
       } else {
-        throw new Error('Failed to generate analysis')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('HTTP error:', response.status, errorData)
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to generate analysis`)
       }
     } catch (error) {
       console.error('Error generating analysis:', error)
-      alert('Failed to generate analysis. Please try again.')
+      
+      let errorMessage = 'Failed to generate analysis. Please try again.'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      alert(errorMessage)
     } finally {
       setIsAnalyzing(false)
     }
@@ -260,6 +605,12 @@ export default function StockComparisonAnalyzer() {
     if (marketCap >= 1e9) return `$${(marketCap / 1e9).toFixed(2)}B`
     if (marketCap >= 1e6) return `$${(marketCap / 1e6).toFixed(2)}M`
     return `$${marketCap.toLocaleString()}`
+  }
+
+  const formatVolume = (volume: number) => {
+    if (volume >= 1e9) return `$${(volume / 1e9).toFixed(2)}B`
+    if (volume >= 1e6) return `$${(volume / 1e6).toFixed(2)}M`
+    return `${volume.toLocaleString()}`
   }
 
   return (
@@ -284,7 +635,7 @@ export default function StockComparisonAnalyzer() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="comparison">Comparison</TabsTrigger>
-          <TabsTrigger value="charts">Charts</TabsTrigger>
+          <TabsTrigger value="compare">Compare</TabsTrigger>
           <TabsTrigger value="analysis">AI Analysis</TabsTrigger>
           <TabsTrigger value="sessions">Saved Sessions</TabsTrigger>
           <TabsTrigger value="insights">Insights</TabsTrigger>
@@ -384,10 +735,7 @@ export default function StockComparisonAnalyzer() {
                                   <span className="text-sm">Market Cap:</span>
                                   <span className="font-medium">{formatMarketCap(stock.marketCap)}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm">P/E:</span>
-                                  <span className="font-medium">{stock.pe || 'N/A'}</span>
-                                </div>
+                                
                               </div>
                             </div>
                             <Button
@@ -409,25 +757,25 @@ export default function StockComparisonAnalyzer() {
           </Card>
         </TabsContent>
 
-        {/* Charts Tab */}
-        <TabsContent value="charts" className="space-y-4">
+        {/* Enhanced Compare Tab with Comprehensive Financial Metrics */}
+        <TabsContent value="compare" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <LineChart className="w-5 h-5" />
-                Advanced Charts & Visualizations
+                <BarChart3 className="w-5 h-5" />
+                Comprehensive Stock Analysis
               </CardTitle>
               <CardDescription>
-                Interactive charts, technical indicators, and performance comparisons
+                Advanced financial metrics, technical indicators, and AI-powered insights
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {selectedStocks.length === 0 ? (
+              {selectedStocks.length < 1 ? (
                 <div className="text-center py-8">
-                  <LineChart className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No Stocks Selected</h3>
+                  <BarChart3 className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Select Stocks First</h3>
                   <p className="text-muted-foreground mb-4">
-                    Please select stocks in the Comparison tab to view charts
+                    Please select at least 1 stock in the Comparison tab to view detailed analysis
                   </p>
                   <Button onClick={() => setActiveTab('comparison')}>
                     Go to Comparison
@@ -435,125 +783,121 @@ export default function StockComparisonAnalyzer() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Chart Period Selector */}
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-medium">Chart Period:</span>
-                    <Select value={chartPeriod} onValueChange={setChartPeriod}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1d">1 Day</SelectItem>
-                        <SelectItem value="5d">5 Days</SelectItem>
-                        <SelectItem value="1mo">1 Month</SelectItem>
-                        <SelectItem value="3mo">3 Months</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  {/* Stock Selection for Detailed View */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Select Stock for Detailed Analysis</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedStocks.map(stock => (
                     <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={async () => {
-                        setIsLoadingEnhancedData(true)
-                        const updatedStocks = await Promise.all(
-                          selectedStocks.map(async (stock) => {
-                            const enhancedData = await loadEnhancedData(stock.symbol)
-                            return { ...stock, ...enhancedData }
-                          })
-                        )
-                        setSelectedStocks(updatedStocks)
-                        setIsLoadingEnhancedData(false)
-                      }}
-                      disabled={isLoadingEnhancedData}
-                    >
-                      {isLoadingEnhancedData ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4" />
-                      )}
-                      Refresh Data
+                            key={stock.symbol}
+                            variant={selectedStockForDetails === stock.symbol ? "default" : "outline"}
+                            onClick={() => setSelectedStockForDetails(stock.symbol)}
+                            className="flex items-center gap-2"
+                          >
+                            {stock.symbol}
                     </Button>
+                        ))}
                   </div>
+                    </CardContent>
+                  </Card>
 
-                  {/* Performance Comparison Chart */}
-                  {selectedStocks.length > 1 && (
-                    <ComparisonChart 
-                      stocks={selectedStocks.map((stock, index) => ({
-                        symbol: stock.symbol,
-                        data: stock.historicalData || [],
-                        color: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'][index % 5]
-                      }))}
-                      period={chartPeriod}
+                  {/* Detailed Financial Metrics for Selected Stock */}
+                  {selectedStockForDetails && detailedStockData[selectedStockForDetails] && (
+                    <FinancialMetricsDisplay 
+                      stock={detailedStockData[selectedStockForDetails]} 
+                      loading={detailedDataLoading}
                     />
                   )}
 
-                  {/* Individual Stock Charts */}
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {selectedStocks.map((stock, index) => (
-                      <div key={stock.symbol} className="space-y-4">
-                        <PriceChart 
-                          symbol={stock.symbol}
-                          data={stock.historicalData || []}
-                          color={['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'][index % 5]}
-                          showVolume={true}
-                        />
-                        
-                        {stock.historicalData && stock.historicalData.length > 0 && (
-                          <>
-                            <TechnicalIndicatorsChart 
-                              symbol={stock.symbol}
-                              data={stock.historicalData}
-                            />
-                            <VolumeAnalysisChart 
-                              symbol={stock.symbol}
-                              data={stock.historicalData}
-                            />
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Technical Analysis Summary */}
-                  {selectedStocks.length > 0 && (
+                  {/* Quick Comparison Table */}
+                  {selectedStocks.length > 1 && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                          <Activity className="w-5 h-5" />
-                          Technical Analysis Summary
+                          <DollarSign className="w-5 h-5" />
+                          Quick Comparison
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                          {selectedStocks.map((stock, index) => (
-                            <div key={stock.symbol} className="p-4 border rounded-lg">
-                              <h4 className="font-semibold mb-2">{stock.symbol}</h4>
-                              <div className="space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                  <span>RSI:</span>
-                                  <span className={stock.technicalIndicators?.rsi > 70 ? 'text-red-600' : 
-                                                   stock.technicalIndicators?.rsi < 30 ? 'text-green-600' : 'text-blue-600'}>
-                                    {stock.technicalIndicators?.rsi?.toFixed(2) || 'N/A'}
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>SMA 20:</span>
-                                  <span>${stock.technicalIndicators?.movingAverages?.sma20?.toFixed(2) || 'N/A'}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>SMA 50:</span>
-                                  <span>${stock.technicalIndicators?.movingAverages?.sma50?.toFixed(2) || 'N/A'}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Support:</span>
-                                  <span>${stock.technicalIndicators?.support?.toFixed(2) || 'N/A'}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Resistance:</span>
-                                  <span>${stock.technicalIndicators?.resistance?.toFixed(2) || 'N/A'}</span>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left p-2 font-medium">Metric</th>
+                                {selectedStocks.map(stock => (
+                                  <th key={stock.symbol} className="text-center p-2 font-medium">
+                                    {stock.symbol}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b">
+                                <td className="p-2 font-medium">Price</td>
+                                {selectedStocks.map(stock => {
+                                  const realtimeData = getSymbolData(stock.symbol)
+                                  const isUpdating = realtimeData && lastUpdateTime && Date.now() - lastUpdateTime.getTime() < 2000
+                                  return (
+                                    <td key={stock.symbol} className={cn(
+                                      "text-center p-2 transition-all duration-300",
+                                      isUpdating && "bg-blue-50 scale-105 font-semibold"
+                                    )}>
+                                      ${(stock.price || 0).toFixed(2)}
+                                      {isUpdating && (
+                                        <div className="w-1 h-1 bg-blue-500 rounded-full mx-auto mt-1 animate-pulse" />
+                                      )}
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                              <tr className="border-b">
+                                <td className="p-2 font-medium">Change %</td>
+                                {selectedStocks.map(stock => {
+                                  const realtimeData = getSymbolData(stock.symbol)
+                                  const isUpdating = realtimeData && lastUpdateTime && Date.now() - lastUpdateTime.getTime() < 2000
+                                  return (
+                                    <td key={stock.symbol} className={cn(
+                                      "text-center p-2 font-medium transition-all duration-300",
+                                      (stock.changePercent || 0) >= 0 ? "text-green-600" : "text-red-600",
+                                      isUpdating && "bg-blue-50 scale-105"
+                                    )}>
+                                      {(stock.changePercent || 0) >= 0 ? '+' : ''}{(stock.changePercent || 0).toFixed(2)}%
+                                      {isUpdating && (
+                                        <div className="w-1 h-1 bg-blue-500 rounded-full mx-auto mt-1 animate-pulse" />
+                                      )}
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                              <tr className="border-b">
+                                <td className="p-2 font-medium">Market Cap</td>
+                                {selectedStocks.map(stock => (
+                                  <td key={stock.symbol} className="text-center p-2">
+                                    {formatMarketCap(stock.marketCap || 0)}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr className="border-b">
+                                <td className="p-2 font-medium">P/E Ratio</td>
+                                {selectedStocks.map(stock => (
+                                  <td key={stock.symbol} className="text-center p-2">
+                                    {stock.pe ? stock.pe.toFixed(2) : 'N/A'}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr>
+                                <td className="p-2 font-medium">Beta</td>
+                                {selectedStocks.map(stock => (
+                                  <td key={stock.symbol} className="text-center p-2">
+                                    {stock.beta ? stock.beta.toFixed(2) : 'N/A'}
+                                  </td>
+                                ))}
+                              </tr>
+                            </tbody>
+                          </table>
                         </div>
                       </CardContent>
                     </Card>
@@ -601,9 +945,11 @@ export default function StockComparisonAnalyzer() {
                       />
                     </div>
 
+
+
                     <Button 
                       onClick={generateAIAnalysis} 
-                      disabled={isAnalyzing}
+                      disabled={isAnalyzing || isSavingSession}
                       className="w-full"
                       size="lg"
                     >
@@ -611,6 +957,11 @@ export default function StockComparisonAnalyzer() {
                         <>
                           <Loader2 className="w-4 h-4 animate-spin mr-2" />
                           Generating AI Analysis...
+                        </>
+                      ) : isSavingSession ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          Saving Session...
                         </>
                       ) : (
                         <>
@@ -622,89 +973,205 @@ export default function StockComparisonAnalyzer() {
                   </div>
 
                   {analysisResult && (
-                    <div className="space-y-6 mt-6">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold">Analysis Results</h3>
+                    <div className="space-y-8 mt-8">
+                      {/* Analysis Header */}
+                      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white/20 rounded-lg">
+                              <Brain className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h3 className="text-xl font-bold">AI Analysis Results</h3>
+                              <p className="text-blue-100 text-sm">
+                                Generated on {new Date().toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm">
+                            <Button 
+                              variant="secondary" 
+                              size="sm" 
+                              onClick={exportAnalysis}
+                              className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+                            >
                             <Download className="w-4 h-4 mr-2" />
                             Export
                           </Button>
-                          <Button variant="outline" size="sm">
+                            <Button 
+                              variant="secondary" 
+                              size="sm" 
+                              onClick={shareAnalysis}
+                              className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+                            >
                             <Share2 className="w-4 h-4 mr-2" />
                             Share
                           </Button>
                         </div>
                       </div>
 
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-sm">
-                              <Building2 className="w-4 h-4" />
-                              Fundamental Analysis
+                        {/* Stock Summary */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {selectedStocks.map((stock, index) => {
+                            const realtimeData = getSymbolData(stock.symbol)
+                            const currentPrice = realtimeData?.price || stock.price
+                            const currentChange = realtimeData?.change || stock.change
+                            const currentChangePercent = realtimeData?.changePercent || stock.changePercent
+                            const isUpdating = realtimeData && lastUpdateTime && Date.now() - lastUpdateTime.getTime() < 2000
+                            
+                            return (
+                              <div key={stock.symbol} className={`bg-white/10 rounded-lg p-3 transition-all duration-300 ${
+                                isUpdating ? 'ring-2 ring-blue-400/50' : ''
+                              }`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-semibold text-lg">{stock.symbol}</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className={`text-sm px-2 py-1 rounded-full ${
+                                      currentChange >= 0 
+                                        ? 'bg-green-500/20 text-green-200' 
+                                        : 'bg-red-500/20 text-red-200'
+                                    }`}>
+                                      {currentChange >= 0 ? '+' : ''}{currentChangePercent.toFixed(2)}%
+                                    </span>
+                                    {isUpdating && (
+                                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-2xl font-bold">${currentPrice.toFixed(2)}</div>
+                                <div className="text-blue-200 text-sm">{stock.name}</div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Analysis Sections */}
+                      <div className="space-y-8">
+                        {/* Fundamental Analysis */}
+                        <Card className="border-l-4 border-l-blue-500 shadow-lg hover:shadow-xl transition-shadow">
+                          <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100/50">
+                            <CardTitle className="flex items-center gap-3 text-blue-800">
+                              <div className="p-2 bg-blue-100 rounded-lg">
+                                <Building2 className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="text-lg font-bold">Fundamental Analysis</div>
+                                <div className="text-sm font-normal text-blue-600">Company Health & Growth</div>
+                              </div>
                             </CardTitle>
                           </CardHeader>
-                          <CardContent>
-                            <p className="text-sm whitespace-pre-line">{analysisResult.fundamental}</p>
+                          <CardContent className="p-6">
+                            <div className="prose prose-sm max-w-none">
+                              <AnalysisTableRenderer content={analysisResult.fundamental} />
+                            </div>
                           </CardContent>
                         </Card>
 
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-sm">
-                              <TrendingUp className="w-4 h-4" />
-                              Technical Analysis
+                        {/* Technical Analysis */}
+                        <Card className="border-l-4 border-l-purple-500 shadow-lg hover:shadow-xl transition-shadow">
+                          <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100/50">
+                            <CardTitle className="flex items-center gap-3 text-purple-800">
+                              <div className="p-2 bg-purple-100 rounded-lg">
+                                <TrendingUp className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="text-lg font-bold">Technical Analysis</div>
+                                <div className="text-sm font-normal text-purple-600">Price Trends & Patterns</div>
+                              </div>
                             </CardTitle>
                           </CardHeader>
-                          <CardContent>
-                            <p className="text-sm whitespace-pre-line">{analysisResult.technical}</p>
+                          <CardContent className="p-6">
+                            <div className="prose prose-sm max-w-none">
+                              <AnalysisTableRenderer content={analysisResult.technical} />
+                            </div>
                           </CardContent>
                         </Card>
 
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-sm">
-                              <AlertTriangle className="w-4 h-4" />
-                              Risk Assessment
+                        {/* Risk Assessment */}
+                        <Card className="border-l-4 border-l-orange-500 shadow-lg hover:shadow-xl transition-shadow">
+                          <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100/50">
+                            <CardTitle className="flex items-center gap-3 text-orange-800">
+                              <div className="p-2 bg-orange-100 rounded-lg">
+                                <AlertTriangle className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="text-lg font-bold">Risk Assessment</div>
+                                <div className="text-sm font-normal text-orange-600">Market & Company Risks</div>
+                              </div>
                             </CardTitle>
                           </CardHeader>
-                          <CardContent>
-                            <p className="text-sm whitespace-pre-line">{analysisResult.risk}</p>
+                          <CardContent className="p-6">
+                            <div className="prose prose-sm max-w-none">
+                              <AnalysisTableRenderer content={analysisResult.risk} />
+                            </div>
                           </CardContent>
                         </Card>
 
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-sm">
-                              <Target className="w-4 h-4" />
-                              Competitive Analysis
+                        {/* Competitive Analysis */}
+                        <Card className="border-l-4 border-l-teal-500 shadow-lg hover:shadow-xl transition-shadow">
+                          <CardHeader className="bg-gradient-to-r from-teal-50 to-teal-100/50">
+                            <CardTitle className="flex items-center gap-3 text-teal-800">
+                              <div className="p-2 bg-teal-100 rounded-lg">
+                                <Target className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="text-lg font-bold">Competitive Analysis</div>
+                                <div className="text-sm font-normal text-teal-600">Market Position & Advantages</div>
+                              </div>
                             </CardTitle>
                           </CardHeader>
-                          <CardContent>
-                            <p className="text-sm whitespace-pre-line">{analysisResult.competitive}</p>
+                          <CardContent className="p-6">
+                            <div className="prose prose-sm max-w-none">
+                              <AnalysisTableRenderer content={analysisResult.competitive} />
+                            </div>
                           </CardContent>
                         </Card>
                       </div>
 
-                      <Card className="border-green-200 bg-green-50">
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2 text-green-800">
-                            <CheckCircle className="w-5 h-5" />
-                            Investment Recommendation
+                      {/* Investment Recommendation */}
+                      <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 shadow-xl">
+                        <CardHeader className="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-t-lg">
+                          <CardTitle className="flex items-center gap-3">
+                            <div className="p-2 bg-white/20 rounded-lg">
+                              <CheckCircle className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <div className="text-xl font-bold">Investment Recommendation</div>
+                              <div className="text-sm font-normal text-green-100">AI-Powered Decision Support</div>
+                            </div>
                           </CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <p className="text-sm whitespace-pre-line text-green-800">{analysisResult.recommendation}</p>
-                          <div className="mt-4 flex items-center gap-2">
-                            <span className="text-sm font-medium">Confidence Level:</span>
-                            <div className="flex-1 bg-green-200 rounded-full h-2">
-                              <div 
-                                className="bg-green-600 h-2 rounded-full" 
+                        <CardContent className="p-8">
+                          <div className="grid gap-6 md:grid-cols-3">
+                                                         <div className="md:col-span-2">
+                               <div className="prose prose-lg max-w-none">
+                                 <AnalysisTableRenderer content={analysisResult.recommendation} />
+                               </div>
+                             </div>
+                                                         <div className="text-center">
+                               <div className="text-2xl font-bold text-green-600 mb-2">
+                                 {analysisResult.confidence}%
+                               </div>
+                               <div className="text-sm text-gray-600 mb-4">Confidence Level</div>
+                               <div className="relative">
+                                 <div className="w-full bg-gray-200 rounded-full h-3">
+                                   <div 
+                                     className={`h-3 rounded-full transition-all duration-500 ${
+                                       analysisResult.confidence >= 80 ? 'bg-green-500' :
+                                       analysisResult.confidence >= 60 ? 'bg-yellow-500' :
+                                       'bg-red-500'
+                                     }`}
                                 style={{ width: `${analysisResult.confidence}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{analysisResult.confidence}%</span>
+                               </div>
+                               <div className="mt-2 text-xs text-gray-500">
+                                 {analysisResult.confidence >= 80 ? 'High Confidence' :
+                                  analysisResult.confidence >= 60 ? 'Moderate Confidence' :
+                                  'Low Confidence'}
+                               </div>
+                             </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -720,6 +1187,8 @@ export default function StockComparisonAnalyzer() {
         <TabsContent value="sessions" className="space-y-4">
           <Card>
             <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="w-5 h-5" />
                 Saved Analysis Sessions
@@ -727,9 +1196,26 @@ export default function StockComparisonAnalyzer() {
               <CardDescription>
                 View and manage your previous stock comparison analyses
               </CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={loadSavedSessions}
+                  disabled={isLoadingSessions}
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingSessions ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              {savedSessions.length === 0 ? (
+              {isLoadingSessions ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 mx-auto animate-spin text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Loading saved sessions...</p>
+                </div>
+              ) : savedSessions.length === 0 ? (
                 <div className="text-center py-8">
                   <Activity className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-medium mb-2">No Saved Sessions</h3>
@@ -764,11 +1250,70 @@ export default function StockComparisonAnalyzer() {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => {
+                                try {
+                                  const sessionData = JSON.parse(session.analysis)
+                                  setAnalysisResult(sessionData)
+                                  setSelectedStocks(session.stocks)
+                                  setCustomPrompt(session.customPrompt || '')
+                                  setActiveTab('analysis')
+                                } catch (error) {
+                                  console.error('Error loading session:', error)
+                                  alert('Error loading saved session')
+                                }
+                              }}
+                            >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            <Button size="sm" variant="outline">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => {
+                                try {
+                                  const sessionData = JSON.parse(session.analysis)
+                                  const analysisData = {
+                                    timestamp: session.timestamp,
+                                    stocks: session.stocks.map(s => ({
+                                      symbol: s.symbol,
+                                      name: s.name,
+                                      price: s.price,
+                                      change: s.change,
+                                      changePercent: s.changePercent
+                                    })),
+                                    analysis: sessionData,
+                                    customPrompt: session.customPrompt || 'No custom prompt'
+                                  }
+
+                                  const blob = new Blob([JSON.stringify(analysisData, null, 2)], {
+                                    type: 'application/json'
+                                  })
+                                  
+                                  const url = URL.createObjectURL(blob)
+                                  const a = document.createElement('a')
+                                  a.href = url
+                                  a.download = `stock-analysis-${session.stocks.map(s => s.symbol).join('-')}-${new Date(session.timestamp).toISOString().split('T')[0]}.json`
+                                  document.body.appendChild(a)
+                                  a.click()
+                                  document.body.removeChild(a)
+                                  URL.revokeObjectURL(url)
+                                } catch (error) {
+                                  console.error('Error exporting session:', error)
+                                  alert('Error exporting saved session')
+                                }
+                              }}
+                            >
                               <Download className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => deleteSession(session.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </div>
@@ -784,6 +1329,7 @@ export default function StockComparisonAnalyzer() {
         {/* Insights Tab */}
         <TabsContent value="insights" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Real-time Market Trends */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
@@ -794,21 +1340,54 @@ export default function StockComparisonAnalyzer() {
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-sm">Sector Performance</span>
-                    <span className="text-sm font-medium text-green-600">+2.3%</span>
+                    <span className="text-sm">Portfolio Performance</span>
+                    <span className={`text-sm font-medium ${
+                      selectedStocks.length > 0 
+                        ? selectedStocks.reduce((acc, stock) => acc + (stock.changePercent || 0), 0) / selectedStocks.length > 0 
+                          ? 'text-green-600' 
+                          : 'text-red-600'
+                        : 'text-gray-600'
+                    }`}>
+                      {selectedStocks.length > 0 
+                        ? `${(selectedStocks.reduce((acc, stock) => acc + (stock.changePercent || 0), 0) / selectedStocks.length).toFixed(2)}%`
+                        : 'N/A'
+                      }
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Market Volatility</span>
-                    <span className="text-sm font-medium">Medium</span>
+                    <span className="text-sm font-medium">
+                      {selectedStocks.length > 0 
+                        ? (() => {
+                            const changes = selectedStocks.map(s => Math.abs(s.changePercent || 0))
+                            const avgChange = changes.reduce((a, b) => a + b, 0) / changes.length
+                            if (avgChange > 5) return 'High'
+                            if (avgChange > 2) return 'Medium'
+                            return 'Low'
+                          })()
+                        : 'N/A'
+                      }
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm">Trading Volume</span>
-                    <span className="text-sm font-medium">Above Avg</span>
+                    <span className="text-sm">Volume Analysis</span>
+                    <span className="text-sm font-medium">
+                      {selectedStocks.length > 0 
+                        ? (() => {
+                            const avgVolume = selectedStocks.reduce((acc, stock) => acc + (stock.volume || 0), 0) / selectedStocks.length
+                            if (avgVolume > 10000000) return 'High'
+                            if (avgVolume > 5000000) return 'Medium'
+                            return 'Low'
+                          })()
+                        : 'N/A'
+                      }
+                    </span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
+            {/* Real-time Sector Distribution */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
@@ -819,36 +1398,32 @@ export default function StockComparisonAnalyzer() {
               <CardContent>
                 <div className="space-y-2">
                   {selectedStocks.length > 0 ? (
-                    selectedStocks.map((stock) => (
-                      <div key={stock.symbol} className="flex justify-between">
-                        <span className="text-sm">{stock.symbol} ({stock.sector})</span>
-                        <span className="text-sm font-medium">{((1 / selectedStocks.length) * 100).toFixed(0)}%</span>
+                    (() => {
+                      const sectorCounts: { [key: string]: number } = {}
+                      selectedStocks.forEach(stock => {
+                        const sector = stock.sector || 'Unknown'
+                        sectorCounts[sector] = (sectorCounts[sector] || 0) + 1
+                      })
+                      
+                      return Object.entries(sectorCounts).map(([sector, count]) => (
+                        <div key={sector} className="flex justify-between">
+                          <span className="text-sm">{sector}</span>
+                          <span className="text-sm font-medium">
+                            {((count / selectedStocks.length) * 100).toFixed(0)}%
+                          </span>
                       </div>
                     ))
+                    })()
                   ) : (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-sm">Technology</span>
-                        <span className="text-sm font-medium">40%</span>
+                    <div className="text-center text-sm text-muted-foreground py-4">
+                      Select stocks to see sector distribution
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm">Healthcare</span>
-                        <span className="text-sm font-medium">25%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm">Finance</span>
-                        <span className="text-sm font-medium">20%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm">Others</span>
-                        <span className="text-sm font-medium">15%</span>
-                      </div>
-                    </>
                   )}
                 </div>
               </CardContent>
             </Card>
 
+            {/* Real-time AI Insights */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
@@ -861,33 +1436,38 @@ export default function StockComparisonAnalyzer() {
                   {selectedStocks.length > 0 ? (
                     <>
                       <div className="text-sm">
-                        <strong>Top Pick:</strong> {selectedStocks[0]?.symbol} - Strong fundamentals
+                        <strong>Top Pick:</strong> {
+                          (() => {
+                            const bestStock = selectedStocks.reduce((best, current) => 
+                              (current.changePercent || 0) > (best.changePercent || 0) ? current : best
+                            )
+                            return `${bestStock.symbol} - ${bestStock.changePercent > 0 ? 'Strong momentum' : 'Potential value'}`
+                          })()
+                        }
                       </div>
                       <div className="text-sm">
-                        <strong>Risk Level:</strong> {selectedStocks.length > 2 ? 'Diversified' : 'Moderate'}
+                        <strong>Risk Level:</strong> {
+                          selectedStocks.length > 2 ? 'Diversified' : 
+                          selectedStocks.some(s => Math.abs(s.changePercent || 0) > 5) ? 'High' : 'Moderate'
+                        }
                       </div>
                       <div className="text-sm">
-                        <strong>Timing:</strong> {selectedStocks.some(s => s.changePercent > 0) ? 'Good entry points' : 'Wait for pullback'}
+                        <strong>Timing:</strong> {
+                          selectedStocks.some(s => s.changePercent > 0) ? 'Mixed signals' : 'Consider entry points'
+                        }
                       </div>
                     </>
                   ) : (
-                    <>
-                      <div className="text-sm">
-                        <strong>Top Recommendation:</strong> Focus on growth stocks with strong fundamentals
+                    <div className="text-center text-sm text-muted-foreground py-4">
+                      Select stocks for AI insights
                       </div>
-                      <div className="text-sm">
-                        <strong>Risk Level:</strong> Moderate - Consider diversification
-                      </div>
-                      <div className="text-sm">
-                        <strong>Timing:</strong> Good entry points available
-                      </div>
-                    </>
                   )}
                 </div>
               </CardContent>
             </Card>
           </div>
 
+          {/* Real-time Market Intelligence */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -898,36 +1478,92 @@ export default function StockComparisonAnalyzer() {
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <h4 className="font-medium mb-2">Economic Indicators</h4>
+                  <h4 className="font-medium mb-2">Portfolio Metrics</h4>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
-                      <span>Inflation Rate:</span>
-                      <span className="font-medium">2.1%</span>
+                      <span>Total Market Cap:</span>
+                      <span className="font-medium">
+                        {selectedStocks.length > 0 
+                          ? formatMarketCap(selectedStocks.reduce((acc, stock) => acc + (stock.marketCap || 0), 0))
+                          : 'N/A'
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Interest Rates:</span>
-                      <span className="font-medium">5.25%</span>
+                      <span>Avg P/E Ratio:</span>
+                      <span className="font-medium">
+                        {selectedStocks.length > 0 
+                          ? (() => {
+                              const validPEs = selectedStocks.filter(s => s.pe && s.pe > 0)
+                              return validPEs.length > 0 
+                                ? (validPEs.reduce((acc, s) => acc + (s.pe || 0), 0) / validPEs.length).toFixed(1)
+                                : 'N/A'
+                            })()
+                          : 'N/A'
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between">
-                      <span>GDP Growth:</span>
-                      <span className="font-medium">2.4%</span>
+                      <span>Avg Beta:</span>
+                      <span className="font-medium">
+                        {selectedStocks.length > 0 
+                          ? (() => {
+                              const validBetas = selectedStocks.filter(s => s.beta && s.beta > 0)
+                              return validBetas.length > 0 
+                                ? (validBetas.reduce((acc, s) => acc + (s.beta || 0), 0) / validBetas.length).toFixed(2)
+                                : 'N/A'
+                            })()
+                          : 'N/A'
+                        }
+                      </span>
                     </div>
                   </div>
                 </div>
                 <div>
-                  <h4 className="font-medium mb-2">Market Sentiment</h4>
+                  <h4 className="font-medium mb-2">Performance Analysis</h4>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
-                      <span>Fear & Greed Index:</span>
-                      <span className="font-medium text-green-600">Greed (75)</span>
+                      <span>Best Performer:</span>
+                      <span className="font-medium text-green-600">
+                        {selectedStocks.length > 0 
+                          ? (() => {
+                              const best = selectedStocks.reduce((best, current) => 
+                                (current.changePercent || 0) > (best.changePercent || 0) ? current : best
+                              )
+                              return `${best.symbol} (${best.changePercent > 0 ? '+' : ''}${best.changePercent?.toFixed(2)}%)`
+                            })()
+                          : 'N/A'
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between">
-                      <span>VIX Index:</span>
-                      <span className="font-medium">18.5</span>
+                      <span>Worst Performer:</span>
+                      <span className="font-medium text-red-600">
+                        {selectedStocks.length > 0 
+                          ? (() => {
+                              const worst = selectedStocks.reduce((worst, current) => 
+                                (current.changePercent || 0) < (worst.changePercent || 0) ? current : worst
+                              )
+                              return `${worst.symbol} (${worst.changePercent > 0 ? '+' : ''}${worst.changePercent?.toFixed(2)}%)`
+                            })()
+                          : 'N/A'
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Put/Call Ratio:</span>
-                      <span className="font-medium">0.85</span>
+                      <span>Volatility Score:</span>
+                      <span className="font-medium">
+                        {selectedStocks.length > 0 
+                          ? (() => {
+                              const changes = selectedStocks.map(s => Math.abs(s.changePercent || 0))
+                              const avgChange = changes.reduce((a, b) => a + b, 0) / changes.length
+                              if (avgChange > 5) return 'High'
+                              if (avgChange > 2) return 'Medium'
+                              return 'Low'
+                            })()
+                          : 'N/A'
+                        }
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -935,7 +1571,9 @@ export default function StockComparisonAnalyzer() {
             </CardContent>
           </Card>
 
-          {/* Enhanced Stock Data */}
+
+
+          {/* Real-time Enhanced Stock Data */}
           {selectedStocks.length > 0 && (
             <Card>
               <CardHeader>
@@ -948,70 +1586,76 @@ export default function StockComparisonAnalyzer() {
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {selectedStocks.map((stock) => (
                     <div key={stock.symbol} className="p-4 border rounded-lg">
-                      <h4 className="font-semibold mb-3">{stock.symbol}</h4>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold">{stock.symbol}</h4>
+                        <Badge variant={stock.changePercent > 0 ? "default" : "destructive"}>
+                          {stock.changePercent > 0 ? '+' : ''}{stock.changePercent?.toFixed(2)}%
+                        </Badge>
+                      </div>
                       
-                      {/* Sentiment Data */}
-                      {stock.sentiment && (
+                      {/* Real-time Price Data */}
                         <div className="mb-3">
-                          <h5 className="text-sm font-medium mb-2">Market Sentiment</h5>
+                        <h5 className="text-sm font-medium mb-2">Price Data</h5>
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
-                              <span>Overall:</span>
-                              <span className={stock.sentiment.overall > 70 ? 'text-green-600' : 
-                                               stock.sentiment.overall < 30 ? 'text-red-600' : 'text-yellow-600'}>
-                                {stock.sentiment.overall?.toFixed(0)}%
+                            <span>Current:</span>
+                            <span className="font-medium">${stock.price?.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                            <span>Change:</span>
+                            <span className={`font-medium ${stock.change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {stock.change > 0 ? '+' : ''}${stock.change?.toFixed(2)}
                               </span>
                             </div>
                             <div className="flex justify-between">
-                              <span>News:</span>
-                              <span>{stock.sentiment.news?.toFixed(0)}%</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Analyst:</span>
-                              <span>{stock.sentiment.analyst?.toFixed(0)}%</span>
+                            <span>Volume:</span>
+                            <span className="font-medium">{formatVolume(stock.volume)}</span>
                             </div>
                           </div>
                         </div>
-                      )}
 
-                      {/* Technical Indicators */}
-                      {stock.technicalIndicators && (
+                      {/* Financial Metrics */}
                         <div className="mb-3">
-                          <h5 className="text-sm font-medium mb-2">Technical Indicators</h5>
+                        <h5 className="text-sm font-medium mb-2">Financial Metrics</h5>
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
-                              <span>RSI:</span>
-                              <span className={stock.technicalIndicators.rsi > 70 ? 'text-red-600' : 
-                                               stock.technicalIndicators.rsi < 30 ? 'text-green-600' : 'text-blue-600'}>
-                                {stock.technicalIndicators.rsi?.toFixed(1)}
-                              </span>
+                            <span>Market Cap:</span>
+                            <span className="font-medium">{formatMarketCap(stock.marketCap)}</span>
                             </div>
+                                                     {stock.pe && stock.pe > 0 && (
                             <div className="flex justify-between">
-                              <span>MACD:</span>
-                              <span>{stock.technicalIndicators.macd?.macd?.toFixed(2)}</span>
+                               <span>P/E Ratio:</span>
+                               <span className="font-medium">{stock.pe.toFixed(1)}</span>
                             </div>
-                          </div>
+                           )}
+                                                     {stock.beta && stock.beta > 0 && (
+                             <div className="flex justify-between">
+                               <span>Beta:</span>
+                               <span className="font-medium">{stock.beta.toFixed(2)}</span>
                         </div>
                       )}
+                        </div>
+                      </div>
 
-                      {/* Recent News */}
-                      {stock.news && stock.news.length > 0 && (
+                      
+
+                                             {/* Sector Info */}
+                       {(stock.sector || stock.industry) && (
                         <div>
-                          <h5 className="text-sm font-medium mb-2">Recent News</h5>
-                          <div className="space-y-2">
-                            {stock.news.slice(0, 2).map((item, index) => (
-                              <div key={index} className="text-xs">
-                                <div className={`inline-block px-2 py-1 rounded text-xs ${
-                                  item.sentiment === 'positive' ? 'bg-green-100 text-green-800' :
-                                  item.sentiment === 'negative' ? 'bg-red-100 text-red-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {item.sentiment}
+                           <h5 className="text-sm font-medium mb-2">Company Info</h5>
+                           <div className="space-y-1 text-xs">
+                             {stock.sector && stock.sector !== 'Unknown' && (
+                               <div className="flex justify-between">
+                                 <span>Sector:</span>
+                                 <span className="font-medium">{stock.sector}</span>
                                 </div>
-                                <div className="mt-1 font-medium">{item.title}</div>
-                                <div className="text-gray-600">{item.source}</div>
+                             )}
+                             {stock.industry && (
+                               <div className="flex justify-between">
+                                 <span>Industry:</span>
+                                 <span className="font-medium">{stock.industry}</span>
                               </div>
-                            ))}
+                             )}
                           </div>
                         </div>
                       )}
@@ -1021,6 +1665,82 @@ export default function StockComparisonAnalyzer() {
               </CardContent>
             </Card>
           )}
+
+          {/* Real-time Market Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" />
+                Market Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {selectedStocks.length > 0 
+                      ? selectedStocks.filter(s => s.changePercent > 0).length
+                      : 0
+                    }
+                  </div>
+                  <div className="text-sm text-muted-foreground">Stocks Up</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red-600">
+                    {selectedStocks.length > 0 
+                      ? selectedStocks.filter(s => s.changePercent < 0).length
+                      : 0
+                    }
+                  </div>
+                  <div className="text-sm text-muted-foreground">Stocks Down</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {selectedStocks.length > 0 
+                      ? selectedStocks.filter(s => s.changePercent === 0).length
+                      : 0
+                    }
+                  </div>
+                  <div className="text-sm text-muted-foreground">Stocks Flat</div>
+                </div>
+              </div>
+              
+              {selectedStocks.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <div className="text-sm text-muted-foreground mb-2">Portfolio Performance Summary</div>
+                  <div className="grid gap-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Total Value Change:</span>
+                      <span className={`font-medium ${
+                        selectedStocks.reduce((acc, stock) => acc + (stock.change || 0), 0) > 0 
+                          ? 'text-green-600' 
+                          : 'text-red-600'
+                      }`}>
+                        {selectedStocks.reduce((acc, stock) => acc + (stock.change || 0), 0) > 0 ? '+' : ''}
+                        ${selectedStocks.reduce((acc, stock) => acc + (stock.change || 0), 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Average Change:</span>
+                      <span className={`font-medium ${
+                        selectedStocks.reduce((acc, stock) => acc + (stock.changePercent || 0), 0) / selectedStocks.length > 0 
+                          ? 'text-green-600' 
+                          : 'text-red-600'
+                      }`}>
+                        {(selectedStocks.reduce((acc, stock) => acc + (stock.changePercent || 0), 0) / selectedStocks.length).toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Volume:</span>
+                      <span className="font-medium">
+                        {formatVolume(selectedStocks.reduce((acc, stock) => acc + (stock.volume || 0), 0))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

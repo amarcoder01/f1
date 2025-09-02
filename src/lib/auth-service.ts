@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { prisma } from './db'
 import { 
   AuthError, 
   AuthErrorType, 
@@ -23,7 +23,7 @@ import {
 } from './auth-security'
 import { NextRequest } from 'next/server'
 
-const prisma = new PrismaClient()
+// Use shared Prisma client from './db' to avoid multiple connections in dev/serverless
 
 export class AuthService {
   // Enhanced user creation with comprehensive validation
@@ -679,18 +679,35 @@ export class AuthService {
   // Get user from access token
   static async getUserFromToken(token: string): Promise<User | null> {
     try {
+      console.log('🔐 AuthService - Verifying token with secret:', {
+        secretLength: SECURITY_CONFIG.JWT_SECRET.length,
+        secretPreview: `${SECURITY_CONFIG.JWT_SECRET.substring(0, 20)}...`
+      })
+      
       // Verify token
       const decoded = verifyToken(token, SECURITY_CONFIG.JWT_SECRET)
+      console.log('🔓 AuthService - Token decoded:', {
+        hasDecoded: !!decoded,
+        userId: decoded?.userId,
+        email: decoded?.email
+      })
       
       if (!decoded || !decoded.userId) {
+        console.log('❌ AuthService - No decoded data or userId')
         return null
       }
 
       // Get user from database
+      console.log('👤 AuthService - Fetching user from database:', decoded.userId)
       const user = await this.getUserById(decoded.userId)
+      console.log('✅ AuthService - User fetched:', {
+        hasUser: !!user,
+        userId: user?.id,
+        email: user?.email
+      })
       return user
     } catch (error) {
-      console.error('Error getting user from token:', error)
+      console.error('❌ AuthService - Error getting user from token:', error)
       return null
     }
   }

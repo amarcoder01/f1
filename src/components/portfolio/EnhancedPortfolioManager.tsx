@@ -314,7 +314,7 @@ export default function EnhancedPortfolioManager() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
               <div className="text-2xl font-bold text-blue-800">
                 ${portfolioStats.totalValue.toLocaleString()}
@@ -326,18 +326,6 @@ export default function EnhancedPortfolioManager() {
                 ${portfolioStats.totalCost.toLocaleString()}
               </div>
               <div className="text-sm text-green-600">Total Cost</div>
-            </div>
-            <div className="text-center p-4 bg-purple-50 rounded-lg">
-              <div className={`text-2xl font-bold ${portfolioStats.totalPnL >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                ${portfolioStats.totalPnL.toLocaleString()}
-              </div>
-              <div className="text-sm text-purple-600">Total P&L</div>
-            </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg">
-              <div className={`text-2xl font-bold ${portfolioStats.totalPnLPercent >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                {portfolioStats.totalPnLPercent.toFixed(2)}%
-              </div>
-              <div className="text-sm text-orange-600">P&L %</div>
             </div>
           </div>
         </CardContent>
@@ -764,7 +752,14 @@ export default function EnhancedPortfolioManager() {
 
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="space-y-4">
-          <PortfolioAnalytics positions={positions} />
+          <PortfolioAnalytics 
+            portfolio={null}
+            positions={positions}
+            trades={trades}
+            onRefresh={() => {
+              // Refresh data if needed
+            }}
+          />
         </TabsContent>
 
         {/* Settings Tab */}
