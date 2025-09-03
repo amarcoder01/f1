@@ -7,6 +7,42 @@ export class MarketViewApiService {
     return { type, message, details }
   }
 
+  private isNetworkError(error: any): boolean {
+    // Check for various network-related error types
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      return true
+    }
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      return true
+    }
+    if (error instanceof Error && error.message.includes('NetworkError')) {
+      return true
+    }
+    if (error instanceof Error && error.message.includes('ERR_NETWORK')) {
+      return true
+    }
+    // Check for specific network connection errors (more specific)
+    if (error instanceof Error && (
+      error.message.includes('ECONNREFUSED') ||
+      error.message.includes('ENOTFOUND') ||
+      error.message.includes('ENETUNREACH') ||
+      error.message.includes('ECONNRESET') ||
+      error.message.includes('ETIMEDOUT') ||
+      error.message.includes('ECONNABORTED')
+    )) {
+      return true
+    }
+    // Check for fetch-specific network errors
+    if (error instanceof Error && error.message.includes('TypeError: Failed to fetch')) {
+      return true
+    }
+    // Check for timeout errors (but be more specific)
+    if (error instanceof Error && error.name === 'AbortError') {
+      return true
+    }
+    return false
+  }
+
   async getStocks(limit: number = 50, cursor?: string): Promise<{ stocks: Stock[]; nextCursor?: string }> {
     try {
       const params = new URLSearchParams({
@@ -17,10 +53,19 @@ export class MarketViewApiService {
         params.append('cursor', cursor)
       }
       
-      const response = await fetch(`${API_BASE_URL}/stocks?${params}`)
+      const response = await fetch(`${API_BASE_URL}/stocks?${params}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Add timeout to prevent hanging requests
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch stocks: ${response.status} ${response.statusText}`)
+        const errorText = await response.text()
+        console.error('API Error Response:', response.status, response.statusText, errorText)
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`)
       }
       
       const data = await response.json()
@@ -30,9 +75,16 @@ export class MarketViewApiService {
         nextCursor: data.nextCursor
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes('fetch')) {
+      console.error('Error fetching stocks:', error)
+      
+      if (this.isNetworkError(error)) {
         throw this.createAppError('NETWORK_ERROR', 'Network connection failed. Please check your internet connection.')
       }
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw this.createAppError('NETWORK_ERROR', 'Request timed out. Please check your internet connection and try again.')
+      }
+      
       throw this.createAppError('API_ERROR', error instanceof Error ? error.message : 'Failed to fetch stock data')
     }
   }
@@ -44,28 +96,51 @@ export class MarketViewApiService {
         limit: '20'
       })
       
-      const response = await fetch(`${API_BASE_URL}/stocks?${params}`)
+      const response = await fetch(`${API_BASE_URL}/stocks?${params}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
       
       if (!response.ok) {
-        throw new Error(`Failed to search stocks: ${response.status} ${response.statusText}`)
+        const errorText = await response.text()
+        console.error('Search API Error Response:', response.status, response.statusText, errorText)
+        throw new Error(`Search request failed: ${response.status} ${response.statusText}`)
       }
       
       const data = await response.json()
       
       return data.stocks || []
     } catch (error) {
-      if (error instanceof Error && error.message.includes('fetch')) {
+      console.error('Error searching stocks:', error)
+      
+      if (this.isNetworkError(error)) {
         throw this.createAppError('NETWORK_ERROR', 'Network connection failed. Please check your internet connection.')
       }
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw this.createAppError('NETWORK_ERROR', 'Search request timed out. Please check your internet connection and try again.')
+      }
+      
       throw this.createAppError('API_ERROR', error instanceof Error ? error.message : 'Failed to search stocks')
     }
   }
 
   async getStockDetails(ticker: string): Promise<StockDetails> {
     try {
-      const response = await fetch(`${API_BASE_URL}/details/${ticker}`)
+      const response = await fetch(`${API_BASE_URL}/details/${ticker}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
       
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Stock Details API Error Response:', response.status, response.statusText, errorText)
         throw new Error(`Failed to fetch stock details: ${response.status} ${response.statusText}`)
       }
       
@@ -73,9 +148,16 @@ export class MarketViewApiService {
       
       return data
     } catch (error) {
-      if (error instanceof Error && error.message.includes('fetch')) {
+      console.error('Error fetching stock details:', error)
+      
+      if (this.isNetworkError(error)) {
         throw this.createAppError('NETWORK_ERROR', 'Network connection failed. Please check your internet connection.')
       }
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw this.createAppError('NETWORK_ERROR', 'Request timed out. Please check your internet connection and try again.')
+      }
+      
       throw this.createAppError('API_ERROR', error instanceof Error ? error.message : `Failed to fetch details for ${ticker}`)
     }
   }
@@ -96,6 +178,69 @@ export class MarketViewApiService {
     }
     
     return false
+  }
+
+  // Test connection to the API
+  async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/stocks?limit=1`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(5000) // 5 second timeout for connection test
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('API Error Response:', response.status, response.statusText, errorText)
+        return {
+          success: false,
+          message: `API responded with status: ${response.status} ${response.statusText}`,
+          details: { status: response.status, statusText: response.statusText, errorText }
+        }
+      }
+      
+      const data = await response.json()
+      
+      if (data.stocks && data.stocks.length > 0) {
+        return {
+          success: true,
+          message: 'Connection successful - API is responding correctly',
+          details: { stocksCount: data.stocks.length, status: data.status }
+        }
+      } else {
+        return {
+          success: false,
+          message: 'API responded but returned no data',
+          details: { response: data }
+        }
+      }
+    } catch (error) {
+      console.error('Connection test failed:', error)
+      
+      if (this.isNetworkError(error)) {
+        return {
+          success: false,
+          message: 'Network connection failed - unable to reach the API server',
+          details: { error: error instanceof Error ? error.message : 'Unknown error' }
+        }
+      }
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        return {
+          success: false,
+          message: 'Connection test timed out - API server may be slow or unresponsive',
+          details: { error: 'Timeout after 5 seconds' }
+        }
+      }
+      
+      return {
+        success: false,
+        message: 'Connection test failed with unexpected error',
+        details: { error: error instanceof Error ? error.message : 'Unknown error' }
+      }
+    }
   }
 }
 

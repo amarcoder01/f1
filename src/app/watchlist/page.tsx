@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Plus, X, Filter, TrendingUp, TrendingDown, Star, RefreshCw, Loader2, Check, AlertCircle } from 'lucide-react'
+import { Search, Plus, X, Filter, TrendingUp, TrendingDown, Star, RefreshCw, Loader2, Check, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PriceTicker } from '@/components/trading/price-ticker'
 import { searchStocks as multiSourceSearchStocks, getStockData } from '@/lib/multi-source-api'
 import { Stock, WatchlistItem } from '@/types'
-import { useWatchlistStore } from '@/store'
+import { useWatchlistStore, useAuthStore } from '@/store'
 
 // WebSocket event data type
 interface WebSocketEvent {
@@ -24,19 +24,30 @@ interface WebSocketEvent {
 // WatchlistItem now includes all required fields
 
 export default function WatchlistPage() {
+  // IMPORTANT: This page follows a database-first architecture
+  // - All watchlist data is fetched fresh from the database
+  // - No watchlist data is stored in localStorage
+  // - The store acts as a temporary cache for UI state only
+  // - Users can manually refresh to get latest data from database
+  
   const { 
     watchlists, 
     addToWatchlist, 
     removeFromWatchlist, 
     createWatchlist,
     loadWatchlists,
+    refreshWatchlistData,
+    clearWatchlist,
     isLoading: storeLoading,
     isConnectedToRealTime,
     startRealTimeUpdates,
     stopRealTimeUpdates,
     isHydrated,
-    setHydrated
+    setHydrated,
+    removeWatchlist: removeWatchlistFromStore // Added this line
   } = useWatchlistStore()
+  
+  const { checkAuth, isAuthenticated, user } = useAuthStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Stock[]>([])  
   const [isSearching, setIsSearching] = useState(false)
@@ -47,8 +58,15 @@ export default function WatchlistPage() {
   const [isLoadingPopular, setIsLoadingPopular] = useState(false)
   const [loadingStocks, setLoadingStocks] = useState<Set<string>>(new Set())
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
-  const [hideInfoMessage, setHideInfoMessage] = useState(false)
   const [refreshSuccess, setRefreshSuccess] = useState<string | false>(false)
+  const [optimisticItems, setOptimisticItems] = useState<WatchlistItem[]>([])
+  const [optimisticRemovals, setOptimisticRemovals] = useState<Set<string>>(new Set())
+  const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newWatchlistName, setNewWatchlistName] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [removingWatchlistId, setRemovingWatchlistId] = useState<string | null>(null)
+  const [activeWatchlistId, setActiveWatchlistId] = useState<string | null>(null)
 
   // Get or create default watchlist
   const defaultWatchlist = watchlists?.find(w => w.name === 'My Watchlist') || {
@@ -59,46 +77,309 @@ export default function WatchlistPage() {
     updatedAt: new Date()
   }
 
+  // Generate unique watchlist name
+  const getUniqueWatchlistName = (baseName: string) => {
+    let name = baseName
+    let counter = 1
+    
+    while (watchlists.find(w => w.name === name)) {
+      name = `${baseName} ${counter}`
+      counter++
+    }
+    
+    return name
+  }
+
+  // Check if a specific watchlist name already exists
+  const isWatchlistNameTaken = (name: string) => {
+    return watchlists.some(w => w.name === name)
+  }
+
+  // Open create watchlist modal
+  const openCreateModal = () => {
+    setShowCreateModal(true)
+    setNewWatchlistName('')
+    setError(null)
+  }
+
+  // Handle watchlist creation with custom name
+  const handleCreateWatchlist = async (name: string) => {
+    try {
+      setError(null)
+      setIsCreatingWatchlist(true)
+      
+      // Check if watchlist with same name already exists
+      const existingWatchlist = watchlists.find(w => w.name === name)
+      if (existingWatchlist) {
+        setError(`Watchlist "${name}" already exists. Please choose a different name.`)
+        setIsCreatingWatchlist(false)
+        return
+      }
+      
+      await createWatchlist(name)
+      
+      // Show success message
+      setRefreshSuccess('created')
+      setTimeout(() => {
+        setRefreshSuccess(false)
+      }, 3000)
+      
+      // Refresh watchlists to get the latest data
+      await loadWatchlists()
+      
+      // Close modal if it was open
+      if (showCreateModal) {
+        setShowCreateModal(false)
+        setNewWatchlistName('')
+      }
+      
+    } catch (error) {
+      console.error('❌ Error creating watchlist:', error)
+      let errorMessage = 'Failed to create watchlist. Please try again.'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Authentication required')) {
+          errorMessage = 'Please log in to create a watchlist.'
+        } else if (error.message.includes('session has expired')) {
+          errorMessage = 'Your session has expired. Please log in again.'
+        } else if (error.message.includes('Failed to create watchlist')) {
+          errorMessage = error.message
+        } else if (error.message.includes('already exists')) {
+          errorMessage = error.message
+        }
+      }
+      
+      setError(errorMessage)
+      
+      // If session expired, show login button
+      if (error instanceof Error && error.message.includes('session has expired')) {
+        setTimeout(() => {
+          window.location.href = '/login?message=session_expired'
+        }, 3000)
+      }
+    } finally {
+      setIsCreatingWatchlist(false)
+      setIsSubmitting(false)
+    }
+  }
+
+  // Handle custom watchlist creation from modal
+  const handleCustomCreate = async () => {
+    if (!newWatchlistName.trim()) {
+      setError('Please enter a watchlist name')
+      return
+    }
+    
+    setIsSubmitting(true)
+    await handleCreateWatchlist(newWatchlistName.trim())
+  }
+
+  // Helper function to get items to display based on current selection
+  const getItemsToDisplay = () => {
+    if (activeWatchlistId) {
+      // Return items from specific watchlist
+      return watchlists.find(w => w.id === activeWatchlistId)?.items || []
+    } else {
+      // Return all items from all watchlists combined
+      return watchlists.reduce((allItems: WatchlistItem[], watchlist) => {
+        if (watchlist.items && watchlist.items.length > 0) {
+          return [...allItems, ...watchlist.items]
+        }
+        return allItems
+      }, [])
+    }
+  }
+
+  // Handle watchlist removal
+  const handleRemoveWatchlist = async (watchlistId: string, watchlistName: string) => {
+    if (!confirm(`Are you sure you want to delete the watchlist "${watchlistName}"? This action cannot be undone and will remove all stocks in this watchlist.`)) {
+      return
+    }
+
+    try {
+      setRemovingWatchlistId(watchlistId)
+      setError(null)
+      
+      // Remove watchlist from store
+      await removeWatchlistFromStore(watchlistId)
+      
+      // If this was the active watchlist, clear it
+      if (activeWatchlistId === watchlistId) {
+        setActiveWatchlistId(null)
+      }
+      
+      // Show success message
+      setRefreshSuccess('removed')
+      setTimeout(() => {
+        setRefreshSuccess(false)
+      }, 3000)
+      
+      // Refresh watchlists to get the latest data
+      await loadWatchlists()
+      
+    } catch (error) {
+      console.error('❌ Error removing watchlist:', error)
+      setError('Failed to remove watchlist. Please try again.')
+    } finally {
+      setRemovingWatchlistId(null)
+    }
+  }
+
+  // Handle watchlist selection
+  const handleSelectWatchlist = (watchlistId: string) => {
+    setActiveWatchlistId(watchlistId)
+    // Scroll to watchlist items section
+    const watchlistItemsSection = document.getElementById('watchlist-items-section')
+    if (watchlistItemsSection) {
+      watchlistItemsSection.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
+
+  // Force clear stale authentication state
+  const forceClearAuth = () => {
+    // Use the proper auth store logout method
+    // This will clear all tokens, cookies, and store state properly
+    if (typeof window !== 'undefined') {
+      // Force page reload to clear all store state
+      window.location.href = '/login?message=session_expired'
+    }
+  }
+
   // Handle hydration on client side
   useEffect(() => {
     // Mark as hydrated after component mounts on client
     if (typeof window !== 'undefined') {
       setHydrated(true)
-      
-      // Check if info message should be hidden
-      const hideInfo = localStorage.getItem('hideWatchlistInfo')
-      if (hideInfo === 'true') {
-        setHideInfoMessage(true)
-      }
     }
   }, [setHydrated])
+
+  // Check authentication status when component mounts
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // CRITICAL: Check for stale authentication state
+      const hasValidToken = localStorage.getItem('token') || document.cookie.includes('token=')
+      if (isAuthenticated && !hasValidToken) {
+        // Force clear stale state immediately
+        forceClearAuth()
+        return
+      }
+      
+      checkAuth()
+    }
+  }, [checkAuth])
 
   // Load watchlists on component mount
   useEffect(() => {
     const initializeWatchlist = async () => {
       try {
         setError(null)
+        setIsLoading(true)
+        // First check authentication status
+        await checkAuth()
+        
+        // Wait a bit for auth state to settle
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Set a timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+          console.warn('⚠️ Watchlist loading timeout, forcing completion')
+          setIsLoading(false)
+        }, 10000) // 10 second timeout
+        
+        // Load watchlists from database
         await loadWatchlists()
+        
+        // Wait a bit for state to update
+        setTimeout(async () => {
+                                  // Don't automatically create watchlist - let user decide
+            if (watchlists.length === 0) {
+              // User needs to create a watchlist
+            } else {
+              // Watchlists loaded successfully
+            }
+          
+          clearTimeout(timeoutId)
+          setIsLoading(false)
+        }, 100)
+        
       } catch (err) {
-        setError('Failed to load watchlists. Please try again.')
         console.error('Error loading watchlists:', err)
+        setError('Failed to load watchlists. Please try again.')
+        setIsLoading(false)
       }
     }
+    
     initializeWatchlist()
-  }, [loadWatchlists])
+  }, [checkAuth, loadWatchlists, isAuthenticated, user]) // Add auth state to dependencies
 
-  // Refresh watchlist data when component mounts if there are items
+  // Safely handle real-time updates
   useEffect(() => {
-    if (defaultWatchlist?.items?.length > 0 && !storeLoading) {
-      // Small delay to ensure store is fully loaded
-      const timer = setTimeout(() => {
-        validateAndFixWatchlistSymbols()
-        refreshWatchlistData()
-      }, 1000)
-      
-      return () => clearTimeout(timer)
+    if (defaultWatchlist?.items?.length > 0 && !isConnectedToRealTime) {
+      try {
+        // Only start real-time updates if the functions exist and are safe to call
+        if (typeof startRealTimeUpdates === 'function') {
+          startRealTimeUpdates()
+        }
+      } catch (error) {
+        console.error('Error starting real-time updates:', error)
+        setError('Failed to connect to real-time data. Some features may be limited.')
+      }
     }
-  }, [defaultWatchlist?.items?.length, storeLoading])
+
+    return () => {
+      if (isConnectedToRealTime && typeof stopRealTimeUpdates === 'function') {
+        try {
+          stopRealTimeUpdates()
+        } catch (error) {
+          console.error('Error stopping real-time updates:', error)
+        }
+      }
+    }
+  }, [defaultWatchlist?.items?.length, isConnectedToRealTime])
+
+  // Force refresh data from database
+  const forceRefreshData = async () => {
+    try {
+      setError(null)
+      setIsLoading(true)
+      // Reload watchlists from database
+      await loadWatchlists()
+      
+      // Wait a bit for state to update
+      setTimeout(async () => {
+        await refreshWatchlistData()
+        setIsLoading(false)
+      }, 500)
+      
+    } catch (error) {
+      console.error('❌ Error force refreshing data:', error)
+      setError('Failed to refresh data. Please try again.')
+      setIsLoading(false)
+    }
+  }
+
+
+
+  // Handle clear all
+  const handleClearAll = async () => {
+    try {
+      setError(null)
+      if (defaultWatchlist?.id && defaultWatchlist.id !== 'default') {
+        if (confirm('Are you sure you want to remove all stocks from your watchlist? This action cannot be undone.')) {
+
+          await clearWatchlist(defaultWatchlist.id)
+          setRefreshSuccess('cleared')
+          setTimeout(() => setRefreshSuccess(false), 3000)
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error clearing watchlist:', error)
+      setError('Failed to clear watchlist. Please try again.')
+    }
+  }
+
+  // Remove problematic useEffect that causes loading loops
+  // This was calling refreshWatchlistData() which created infinite loops
 
   // Function to validate and fix invalid symbols (without removing)
   const validateAndFixWatchlistSymbols = async () => {
@@ -156,13 +437,6 @@ export default function WatchlistPage() {
     }
   }
 
-  // If no default watchlist exists, create one
-  useEffect(() => {
-    if (watchlists?.length === 0 && !storeLoading) {
-      createWatchlist('My Watchlist')
-    }
-  }, [watchlists, createWatchlist, storeLoading])
-
   // Start real-time updates for watchlist items using multi-source
   useEffect(() => {
     if (defaultWatchlist?.items?.length > 0) {
@@ -171,8 +445,9 @@ export default function WatchlistPage() {
       // Set up periodic updates for all symbols
       const updateInterval = setInterval(async () => {
         try {
-          const { updateWatchlistItem } = useWatchlistStore.getState()
-          
+          // Safely get the update function from the store
+          const store = useWatchlistStore.getState()
+          if (store && typeof store.updateWatchlistItem === 'function') {
           // Update each symbol with fresh data from multi-source
           for (const symbol of symbols) {
             try {
@@ -180,7 +455,7 @@ export default function WatchlistPage() {
               if (freshData && freshData.price > 0) {
                 const existingItem = defaultWatchlist?.items?.find(item => item.symbol === symbol)
                 if (existingItem) {
-                  updateWatchlistItem(defaultWatchlist?.id || 'default', existingItem.id, {
+                    store.updateWatchlistItem(defaultWatchlist?.id || 'default', existingItem.id, {
                     price: freshData.price,
                     change: freshData.change,
                     changePercent: freshData.changePercent,
@@ -190,6 +465,7 @@ export default function WatchlistPage() {
               }
             } catch (error) {
               console.error(`Error updating ${symbol}:`, error)
+              }
             }
           }
         } catch (error) {
@@ -202,24 +478,6 @@ export default function WatchlistPage() {
       }
     }
   }, [defaultWatchlist?.items])
-
-  // Start real-time updates when watchlist has items
-  useEffect(() => {
-    if (defaultWatchlist && defaultWatchlist?.items?.length > 0 && !isConnectedToRealTime) {
-      try {
-        startRealTimeUpdates()
-      } catch (error) {
-        console.error('Error starting real-time updates:', error)
-        setError('Failed to connect to real-time data. Some features may be limited.')
-      }
-    }
-    
-    return () => {
-      if (isConnectedToRealTime) {
-        stopRealTimeUpdates()
-      }
-    }
-  }, [defaultWatchlist?.items.length, isConnectedToRealTime, startRealTimeUpdates, stopRealTimeUpdates])
 
   // Enhanced search functionality using yfinance API
   useEffect(() => {
@@ -241,16 +499,10 @@ export default function WatchlistPage() {
       setError(null)
       
       try {
-        console.log(`🔍 Searching for: "${searchQuery}"`)
-        
         // Use the yfinance API route for real-time data
         const searchUrl = `/api/stocks/yfinance-search?q=${encodeURIComponent(searchQuery)}`
-        console.log(`📡 Making request to: ${searchUrl}`)
         
         const response = await fetch(searchUrl)
-        
-        console.log(`📡 Response status: ${response.status}`)
-        console.log(`📡 Response ok: ${response.ok}`)
         
         if (!response.ok) {
           const errorText = await response.text()
@@ -296,85 +548,125 @@ export default function WatchlistPage() {
     return () => clearTimeout(debounceTimeout)
   }, [searchQuery])
 
-  // Filter watchlist items
-  const filteredItems = defaultWatchlist?.items?.filter(item => {
+  // Filter watchlist items with optimistic updates
+  const allItems = [
+    ...(defaultWatchlist?.items || []),
+    ...optimisticItems
+  ]
+  
+  const filteredItems = allItems.filter(item => {
+    // Exclude optimistically removed items
+    if (optimisticRemovals.has(item.id)) {
+      return false
+    }
+    
     const matchesSearch = item.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.name.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesSearch
   }) || []
 
-  const handleAddToWatchlist = async (stock: Stock) => {
+  // Calculate total items for display
+  const totalItems = filteredItems.length
+
+  // Calculate totals with real-time data
+  const averagePrice = totalItems > 0 ? filteredItems.reduce((sum, item) => sum + (item.price || 0), 0) / totalItems : 0
+  const totalChange = filteredItems.reduce((sum, item) => sum + (item.change || 0), 0)
+  const totalChangePercent = totalItems > 0 ? filteredItems.reduce((sum, item) => sum + (item.changePercent || 0), 0) / totalItems : 0
+  const gainers = filteredItems.filter(item => (item.changePercent || 0) > 0).length
+  const losers = filteredItems.filter(item => (item.changePercent || 0) < 0).length
+
+  // Check if a stock is already in the watchlist
+  const isInWatchlist = (symbol: string) => {
+    return defaultWatchlist?.items?.some(item => 
+      item.symbol.toUpperCase() === symbol.toUpperCase()
+    ) || false
+  }
+
+  // Handle adding stock to specific watchlist
+  const handleAddToWatchlist = async (stock: Stock, targetWatchlistId?: string) => {
     try {
       setError(null)
-      setIsAddingSymbol(true)
+      setLoadingStocks(prev => new Set(prev).add(stock.symbol))
       
-      console.log(`🔍 Starting to add ${stock.symbol} to watchlist...`)
-      console.log(`📊 Stock data:`, stock)
+      // Determine which watchlist to add to
+      let watchlistToUse = targetWatchlistId 
+        ? watchlists.find(w => w.id === targetWatchlistId)
+        : activeWatchlistId 
+          ? watchlists.find(w => w.id === activeWatchlistId)
+          : watchlists[0] // Fallback to first watchlist
       
-      // Use the search data directly since it's already validated
-      // The search API already provides valid stock data
-      console.log(`✅ Adding ${stock.symbol} to watchlist with search data:`, stock)
-      
-      // Validate that we have the minimum required data
-      if (!stock.symbol || !stock.name || !stock.price || stock.price <= 0) {
-        console.error(`❌ Invalid stock data for ${stock.symbol}:`, {
-          symbol: stock.symbol,
-          name: stock.name,
-          price: stock.price
-        })
-        throw new Error(`Invalid stock data for ${stock.symbol}`)
+      if (!watchlistToUse) {
+        setError('No watchlist available. Please create a watchlist first.')
+        return
       }
-      
-      const watchlistItem: WatchlistItem = {
-        id: Date.now().toString(),
+
+      // Check if stock already exists in the target watchlist
+      const isAlreadyInWatchlist = watchlistToUse.items?.some(item => item.symbol === stock.symbol)
+      if (isAlreadyInWatchlist) {
+        setError(`${stock.symbol} is already in "${watchlistToUse.name}"`)
+        return
+      }
+
+      // Add stock to the specific watchlist
+      await addToWatchlist(watchlistToUse.id, {
+        id: '', // Will be set by the API
         symbol: stock.symbol,
         name: stock.name,
         type: 'stock',
-        price: stock.price,
+        price: stock.price || 0,
         change: stock.change || 0,
         changePercent: stock.changePercent || 0,
-        volume: stock.volume || 0,
-        sector: stock.sector || 'Technology',
-        industry: stock.industry || 'Technology',
         exchange: stock.exchange || 'NASDAQ',
+        sector: stock.sector || 'Unknown',
+        industry: stock.industry || 'Unknown',
+        volume: stock.volume || 0,
         marketCap: stock.marketCap || 0,
         addedAt: new Date()
-      }
+      })
       
-      console.log(`📝 Created watchlist item:`, watchlistItem)
+      // Show success message
+      setRefreshSuccess('added')
+      setTimeout(() => {
+        setRefreshSuccess(false)
+      }, 3000)
       
-      await addToWatchlist(defaultWatchlist?.id || 'default', watchlistItem)
+      // Clear search query
       setSearchQuery('')
       setSearchResults([])
-      setIsAddingSymbol(false)
-      console.log(`✅ Successfully added ${stock.symbol} to watchlist`)
+      
+      // Refresh watchlists to get the latest data
+      await loadWatchlists()
+      
           } catch (error) {
         console.error('❌ Error adding stock to watchlist:', error)
-        setIsAddingSymbol(false)
-        let errorMessage = `Failed to add ${stock.symbol} to watchlist. Please try again.`
+      let errorMessage = 'Failed to add stock to watchlist. Please try again.'
         
         if (error instanceof Error) {
-          console.error('❌ Error details:', error.message)
-          if (error.message.includes('Invalid stock data')) {
-            errorMessage = `${stock.symbol} has invalid data. Please try searching again.`
-          } else if (error.message.includes('duplicate') || error.message.includes('already exists')) {
-            errorMessage = `${stock.symbol} is already in your watchlist.`
-          } else if (error.message.includes('storage') || error.message.includes('quota')) {
-            errorMessage = 'Storage limit reached. Please remove some stocks from your watchlist.'
-          } else if (error.message.includes('Failed to fetch')) {
-            errorMessage = `Network error while adding ${stock.symbol}. Please check your connection.`
-          } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
-            errorMessage = `Server error while adding ${stock.symbol}. Please try again later.`
-          } else if (error.message.includes('API Error')) {
-            // Extract the specific error message from API Error
-            const apiErrorMessage = error.message.replace(/^API Error \d+: /, '')
-            errorMessage = `Server error: ${apiErrorMessage}`
-          } else if (error.message.includes('Missing required fields')) {
-            errorMessage = `Invalid stock data for ${stock.symbol}. Please try searching again.`
+        if (error.message.includes('Authentication required')) {
+          errorMessage = 'Please log in to add stocks to watchlist.'
+        } else if (error.message.includes('session has expired')) {
+          errorMessage = 'Your session has expired. Please log in again.'
+        } else if (error.message.includes('already exists')) {
+          errorMessage = error.message
+        } else if (error.message.includes('not found')) {
+          errorMessage = 'Watchlist not found. Please refresh and try again.'
           }
         }
         
         setError(errorMessage)
+      
+      // If session expired, show login button
+      if (error instanceof Error && error.message.includes('session has expired')) {
+        setTimeout(() => {
+          window.location.href = '/login?message=session_expired'
+        }, 3000)
+      }
+    } finally {
+      setLoadingStocks(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(stock.symbol)
+        return newSet
+      })
       }
   }
 
@@ -416,92 +708,6 @@ export default function WatchlistPage() {
     }
   }
 
-  const refreshWatchlistData = async () => {
-    try {
-      console.log('🔄 Refresh button clicked')
-      setError(null)
-      setIsLoading(true)
-      
-      const { updateWatchlistItem } = useWatchlistStore.getState()
-      
-      // Check if defaultWatchlist exists and has items
-      if (!defaultWatchlist?.items?.length) {
-        console.log('⚠️ No items to refresh')
-        setIsLoading(false)
-        return
-      }
-      
-      console.log(`🔄 Refreshing data for ${defaultWatchlist.items.length} stocks...`)
-      console.log('📊 Stocks to refresh:', defaultWatchlist.items.map(item => item.symbol))
-      
-      // Refresh data for all watchlist items using yfinance API
-      const refreshPromises = defaultWatchlist.items.map(async (item) => {
-        try {
-          console.log(`🔍 Refreshing ${item.symbol}...`)
-          
-          // Use yfinance API to get fresh data
-          const response = await fetch(`/api/stocks/yfinance-search?q=${encodeURIComponent(item.symbol)}`)
-          
-          if (response.ok) {
-            const data = await response.json()
-            console.log(`📊 API response for ${item.symbol}:`, data)
-            
-            const freshData = data.results?.[0] // Get the first (and should be only) result
-            
-          if (freshData && freshData.price > 0) {
-            updateWatchlistItem(defaultWatchlist?.id || 'default', item.id, {
-              price: freshData.price,
-              change: freshData.change,
-              changePercent: freshData.changePercent,
-              volume: freshData.volume,
-              marketCap: freshData.marketCap,
-              sector: freshData.sector,
-              industry: freshData.industry
-            })
-              console.log(`✅ Refreshed data for ${item.symbol}: $${freshData.price} (${freshData.changePercent >= 0 ? '+' : ''}${freshData.changePercent.toFixed(2)}%)`)
-          } else {
-              console.warn(`⚠️ Could not refresh data for ${item.symbol}: No valid data returned`)
-            }
-          } else {
-            console.error(`❌ Failed to refresh ${item.symbol}: API returned ${response.status}`)
-          }
-        } catch (error) {
-          console.error(`❌ Error refreshing data for ${item.symbol}:`, error)
-        }
-      })
-      
-      await Promise.all(refreshPromises)
-      console.log('✅ Watchlist data refresh completed via yfinance')
-      
-      // Show success message
-      setError(null)
-      setRefreshSuccess('refreshed')
-      
-      // Hide success message after 3 seconds
-      setTimeout(() => {
-        setRefreshSuccess(false)
-      }, 3000)
-      
-    } catch (error) {
-      console.error('❌ Error refreshing watchlist data:', error)
-      setError('Failed to refresh watchlist data. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-
-
-  // Calculate totals with real-time data
-  const totalItems = filteredItems?.length || 0
-  const averagePrice = totalItems > 0 ? filteredItems.reduce((sum, item) => sum + (item.price || 0), 0) / totalItems : 0
-  const totalChange = filteredItems.reduce((sum, item) => sum + (item.change || 0), 0)
-  const totalChangePercent = totalItems > 0 ? (totalChange / filteredItems.reduce((sum, item) => sum + ((item.price || 0) - (item.change || 0)), 0)) * 100 : 0
-  const gainers = filteredItems.filter(item => (item.changePercent || 0) > 0).length
-  const losers = filteredItems.filter(item => (item.changePercent || 0) < 0).length
-
-
-
   // Show loading state while store is initializing
   if (storeLoading || !isHydrated) {
     return (
@@ -516,137 +722,315 @@ export default function WatchlistPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Error Display */}
+      {/* Error Messages */}
       {error && (
-        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <div className="flex items-center gap-2">
-            <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
-            <button 
-              onClick={() => setError(null)}
-              className="ml-auto text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Success Message */}
-      {refreshSuccess && (
-        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <div className="flex items-center gap-2">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6"
+        >
+          <div className="flex items-start space-x-3">
             <div className="flex-shrink-0">
-              <div className="w-5 h-5 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                <span className="text-green-600 dark:text-green-400 text-xs font-bold">✓</span>
-              </div>
-            </div>
-            <p className="text-green-700 dark:text-green-300 text-sm">
-              <strong>Success!</strong> {refreshSuccess === 'removed' ? 'Stock removed from watchlist successfully!' : refreshSuccess === 'refreshed' ? 'All stock data has been updated with the latest prices.' : 'Operation completed successfully!'}
-            </p>
-            <button 
-              onClick={() => setRefreshSuccess(false)}
-              className="ml-auto text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Info Message */}
-      {defaultWatchlist?.items?.length > 0 && !hideInfoMessage && (
-        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <div className="flex items-center gap-2">
-            <div className="flex-shrink-0">
-              <div className="w-5 h-5 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                <span className="text-blue-600 dark:text-blue-400 text-xs font-bold">i</span>
-              </div>
+              <XCircle className="w-5 h-5 text-red-400" />
             </div>
             <div className="flex-1">
-              <p className="text-blue-700 dark:text-blue-300 text-sm">
-                <strong>Watchlist Management:</strong> Your stocks are now safe and won't be automatically removed. 
-                You can manually remove any stock by clicking the remove button next to it.
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                {error.includes('already exists') ? 'Duplicate Watchlist Name' : 'Error'}
+              </h3>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                {error}
               </p>
-            </div>
-            <button 
-              onClick={() => {
-                // Hide the message by setting a flag in localStorage
-                localStorage.setItem('hideWatchlistInfo', 'true')
-                setHideInfoMessage(true)
-              }}
-              className="ml-auto text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
+              {error.includes('already exists') && (
+                <div className="mt-3 p-3 bg-orange-100 dark:bg-orange-800/30 rounded-lg border border-orange-200 dark:border-orange-700">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <AlertCircle className="w-4 h-4 text-orange-600" />
+                    <span className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                      🚫 DUPLICATE WATCHLIST PREVENTED
+                    </span>
+                  </div>
+                  <p className="text-xs text-orange-700 dark:text-orange-300 mb-2">
+                    <strong>Why this happened:</strong> A watchlist with the name "{error.match(/"([^"]+)"/)?.[1] || 'this name'}" already exists in your account.
+                  </p>
+                  <p className="text-xs text-orange-600 dark:text-orange-400">
+                    <strong>💡 Solution:</strong> Click "Create Watchlist" again and the system will automatically suggest a unique name for you.
+                  </p>
+                  {watchlists.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-orange-200 dark:border-orange-600">
+                      <p className="text-xs text-orange-600 dark:text-orange-400 mb-1">
+                        <strong>Your existing watchlists:</strong>
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {watchlists.map((watchlist) => (
+                          <span 
+                            key={watchlist.id}
+                            className="inline-block px-2 py-1 text-xs bg-orange-200 dark:bg-orange-700 text-orange-800 dark:text-orange-200 rounded-md"
+                          >
+                            {watchlist.name}
+                          </span>
+                        ))}
           </div>
         </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-800/30"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Success Messages */}
+      {refreshSuccess && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6"
+        >
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-green-800 dark:text-green-200">
+                {refreshSuccess === 'created' ? 'Watchlist Created Successfully!' : 'Success'}
+              </h3>
+              <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                {refreshSuccess === 'created' && 'Your new watchlist has been created and is ready to use.'}
+                {refreshSuccess === 'cleared' && 'All stocks have been removed from your watchlist.'}
+                {refreshSuccess === 'removed' && 'Watchlist has been successfully removed.'}
+                {refreshSuccess === 'switched' && 'Successfully switched to selected watchlist.'}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRefreshSuccess(false)}
+              className="text-green-400 hover:text-green-600 hover:bg-green-100 dark:hover:bg-green-800/30"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Create Watchlist Modal */}
+      {showCreateModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowCreateModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Create New Watchlist
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+              </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="watchlistName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Watchlist Name
+                </label>
+                <input
+                  id="watchlistName"
+                  type="text"
+                  value={newWatchlistName}
+                  onChange={(e) => setNewWatchlistName(e.target.value)}
+                  placeholder="Enter watchlist name (e.g., Tech Stocks, Dividend Portfolio)"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  onKeyPress={(e) => e.key === 'Enter' && handleCustomCreate()}
+                />
+            </div>
+              
+              {watchlists.length > 0 && (
+                <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                    <strong>Your existing watchlists:</strong>
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {watchlists.map((watchlist) => (
+                      <span 
+                        key={watchlist.id}
+                        className="inline-block px-2 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-md"
+                      >
+                        {watchlist.name}
+                      </span>
+                    ))}
+            </div>
+                </div>
+              )}
+              
+              <div className="flex space-x-3 pt-2">
+                <Button
+                  onClick={() => setShowCreateModal(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCustomCreate}
+                  disabled={!newWatchlistName.trim() || isSubmitting}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Create Watchlist'
+                  )}
+                </Button>
+          </div>
+        </div>
+          </motion.div>
+        </motion.div>
       )}
 
       {/* Page Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
-      >
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Stock Watchlist</h1>
-          <p className="text-muted-foreground">
-            Track your favorite stocks and monitor their real-time performance
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Watchlist</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">
+            Track your favorite stocks and monitor their performance
           </p>
         </div>
+        
+        {/* Action Buttons */}
+        <div className="flex items-center space-x-3">
+          {/* Watchlist Selector */}
+          {watchlists.length > 0 && (
         <div className="flex items-center space-x-2">
-          <Badge 
-            variant={totalChangePercent >= 0 ? 'default' : 'destructive'}
-            className="text-sm"
-          >
-            {totalChangePercent >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-            {totalChangePercent.toFixed(2)}%
-          </Badge>
+              <label htmlFor="watchlist-selector" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Active:
+              </label>
+              <select
+                id="watchlist-selector"
+                value={activeWatchlistId || ''}
+                onChange={(e) => {
+                  const selectedId = e.target.value
+                  if (selectedId === '') {
+                    setActiveWatchlistId(null)
+                  } else {
+                    setActiveWatchlistId(selectedId)
+                    // Scroll to watchlist items section
+                    const watchlistItemsSection = document.getElementById('watchlist-items-section')
+                    if (watchlistItemsSection) {
+                      watchlistItemsSection.scrollIntoView({ behavior: 'smooth' })
+                    }
+                  }
+                }}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+              >
+                <option value="">All Watchlists</option>
+                {watchlists.map((watchlist, index) => (
+                  <option key={watchlist.id} value={watchlist.id}>
+                    {index + 1}. {watchlist.name} ({watchlist.items?.length || 0} stocks)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Create Watchlist Button */}
           <Button 
-            onClick={refreshWatchlistData}
-            disabled={isLoading || !defaultWatchlist?.items?.length}
+            onClick={openCreateModal}
+            disabled={isCreatingWatchlist}
+            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {isCreatingWatchlist ? (
+              <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Creating...</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                <span>Create Watchlist</span>
+              </>
+            )}
+          </Button>
+          
+          {/* Refresh Button - Always fetch fresh data from database */}
+          <Button 
+            onClick={() => refreshWatchlistData()}
             variant="outline"
-            size="sm"
+            disabled={storeLoading}
             className="flex items-center space-x-2"
           >
-            {isLoading ? (
+            {storeLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            <span>Refresh</span>
-          </Button>
-          <Button 
-            onClick={() => {
-              setIsAddingSymbol(!isAddingSymbol)
-              if (!isAddingSymbol) {
-                // Focus on search input when opening add mode
-                setTimeout(() => {
-                  const searchInput = document.querySelector('input[placeholder*="Search stocks"]') as HTMLInputElement
-                  if (searchInput) {
-                    searchInput.focus()
-                  }
-                }, 100)
-              }
-            }} 
-            className="flex items-center space-x-2"
-            variant={isAddingSymbol ? "outline" : "default"}
-          >
-            <Plus className="w-4 h-4" />
-            <span>{isAddingSymbol ? 'Cancel' : 'Add Stock'}</span>
+            <span>Refresh Data</span>
           </Button>
         </div>
+      </div>
+
+      {/* Watchlist Status Indicator */}
+      {activeWatchlistId && watchlists.find(w => w.id === activeWatchlistId) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Currently viewing: <strong>{watchlists.find(w => w.id === activeWatchlistId)?.name}</strong>
+              </span>
+            </div>
+            <div className="flex items-center space-x-4 text-sm text-blue-700 dark:text-blue-300">
+              <span>
+                📊 {watchlists.find(w => w.id === activeWatchlistId)?.items?.length || 0} stocks
+              </span>
+              <span>
+                📅 Created {new Date(watchlists.find(w => w.id === activeWatchlistId)?.createdAt || '').toLocaleDateString()}
+              </span>
+              <span>
+                🔄 Last updated {new Date(watchlists.find(w => w.id === activeWatchlistId)?.updatedAt || '').toLocaleTimeString()}
+              </span>
+            </div>
+        </div>
       </motion.div>
+      )}
 
       {/* Search and Filter */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="space-y-4"
+        className="space-y-6"
       >
+        {/* Enhanced Search Bar */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="flex items-center space-x-4">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
             <input
               type="text"
               placeholder="Search stocks (e.g., AAPL, Apple, Tesla)..."
@@ -655,265 +1039,603 @@ export default function WatchlistPage() {
                 console.log(`🔍 Search input changed: "${e.target.value}"`)
                 setSearchQuery(e.target.value)
               }}
-              className="w-full pl-10 pr-12 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
             />
             {searchQuery && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 hover:bg-gray-200 dark:hover:bg-gray-600"
               >
-                <X className="w-3 h-3" />
+                  <X className="w-4 h-4" />
               </Button>
             )}
             {isSearching && (
-              <Loader2 className="absolute right-8 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                <Loader2 className="absolute right-10 top-1/2 transform -translate-y-1/2 w-5 h-5 animate-spin text-gray-400 dark:text-gray-500" />
             )}
           </div>
-          
+          </div>
         </div>
 
-        {/* Search Results */}
+        {/* Enhanced Search Results */}
         {searchQuery.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center justify-between">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                  <Search className="w-5 h-5 mr-2 text-blue-600 dark:text-blue-400" />
                     Search Results for "{searchQuery}"
+                </h3>
                     <div className="flex items-center space-x-2">
-                      <span className="text-sm text-muted-foreground font-normal">
+                  <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">
                         {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
                       </span>
-                      {isSearching && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isSearching && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
                     </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+              </div>
+              
+              {/* Watchlist Selection for Adding Stocks */}
+              {watchlists.length > 0 && (
+                <div className="mt-3 flex items-center space-x-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Add to:</span>
+                  <select
+                    value={activeWatchlistId || ''}
+                    onChange={(e) => setActiveWatchlistId(e.target.value || null)}
+                    className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="">Select Watchlist</option>
+                    {watchlists.map((watchlist) => (
+                      <option key={watchlist.id} value={watchlist.id}>
+                        {watchlist.name} ({watchlist.items?.length || 0} stocks)
+                      </option>
+                    ))}
+                  </select>
+                  {activeWatchlistId && (
+                    <span className="text-xs text-blue-600 dark:text-blue-400">
+                      ✓ {watchlists.find(w => w.id === activeWatchlistId)?.name}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="p-4">
               {searchResults.length > 0 ? (
-                // Show search results
                   <div className="space-y-3">
                     {searchResults.map((stock) => (
-                      <div key={stock.symbol} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                        <div className="flex-1">
+                    <div
+                      key={stock.symbol}
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
+                    >
                           <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                              <span className="text-white font-bold text-sm">{stock.symbol[0]}</span>
+                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                          <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                            {stock.symbol[0]}
+                          </span>
                             </div>
                             <div>
-                              <div className="font-semibold">{stock.symbol}</div>
-                              <div className="text-sm text-muted-foreground">{stock.name}</div>
-                              <div className="text-xs text-muted-foreground">{stock.exchange}</div>
+                          <div className="font-semibold text-gray-900 dark:text-white">{stock.symbol}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">{stock.name}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-500">
+                            {stock.exchange} • {stock.sector || 'N/A'}
                             </div>
                           </div>
                         </div>
-                        <div className="text-right mr-4">
-                          <div className="font-semibold">${stock.price.toFixed(2)}</div>
-                          <div className={`text-sm ${stock.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {stock.changePercent >= 0 ? '+' : ''}{stock.change.toFixed(2)} ({stock.changePercent.toFixed(2)}%)
+                      
+                      <div className="flex items-center space-x-3">
+                        <div className="text-right">
+                          <div className="font-semibold text-gray-900 dark:text-white">
+                            ${stock.price?.toFixed(2) || 'N/A'}
                           </div>
+                          <div className={`text-sm ${(stock.changePercent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {(stock.change || 0) >= 0 ? '+' : ''}{stock.change?.toFixed(2) || '0.00'} 
+                            ({(stock.changePercent || 0).toFixed(2)}%)
                         </div>
+                        </div>
+                        
                         <Button
+                          onClick={() => handleAddToWatchlist(stock, activeWatchlistId || undefined)}
+                          disabled={loadingStocks.has(stock.symbol) || !activeWatchlistId}
                           size="sm"
-                          onClick={async () => {
-                            try {
-                              setLoadingStocks(prev => new Set(prev).add(stock.symbol))
-                              await handleAddToWatchlist(stock)
-                            } finally {
-                              setLoadingStocks(prev => {
-                                const newSet = new Set(prev)
-                                newSet.delete(stock.symbol)
-                                return newSet
-                              })
-                            }
-                          }}
-                                                  disabled={defaultWatchlist?.items?.some(item => item.symbol === stock.symbol) || loadingStocks.has(stock.symbol)}
-                        variant={defaultWatchlist?.items?.some(item => item.symbol === stock.symbol) ? "outline" : "default"}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
                         >
                           {loadingStocks.has(stock.symbol) ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                              Adding...
-                            </>
-                          ) : defaultWatchlist?.items?.some(item => item.symbol === stock.symbol) ? (
-                            <>
-                              <Check className="w-4 h-4 mr-1" />
-                              Added
-                            </>
+                            <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
-                            <>
-                              <Plus className="w-4 h-4 mr-1" />
-                              Add
-                            </>
+                            <Plus className="w-4 h-4" />
                           )}
+                          {activeWatchlistId ? 'Add' : 'Select Watchlist'}
                         </Button>
                       </div>
-                    ))}
                   </div>
-                ) : !isSearching ? (
-                  <div className="text-center py-8">
-                    <div className="mb-4">
-                      <div className="w-16 h-16 mx-auto bg-muted rounded-full flex items-center justify-center">
-                        <Search className="w-8 h-8 text-muted-foreground" />
-                      </div>
-                    </div>
-                    {error ? (
-                      <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                        <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground font-medium">No stocks found for "{searchQuery}"</p>
-                    )}
-                    <p className="text-sm text-muted-foreground mt-2">Try these popular stocks:</p>
-                    <div className="mt-3 flex flex-wrap gap-2 justify-center">
-                      {['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'AMZN', 'META', 'NFLX'].map((symbol) => (
-                        <Button
-                          key={symbol}
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSearchQuery(symbol)}
-                          className="text-xs"
-                        >
-                          {symbol}
-                        </Button>
-                      ))}
-                    </div>
+                  ))}
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                    <p className="text-muted-foreground">Searching...</p>
+                  <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400">No stocks found matching "{searchQuery}"</p>
                   </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </motion.div>
         )}
+      </motion.div>
 
-        {/* Popular Stocks Section */}
+      {/* Enhanced Popular Stocks - only show when not searching */}
         {searchQuery.length === 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Star className="w-5 h-5 text-yellow-500" />
-                  <span>Popular Stocks</span>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          {/* Main Popular Stocks Grid */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                  <Star className="w-5 h-5 mr-2 text-yellow-500" />
+                  Popular Stocks
+                </h3>
+                <span className="text-sm text-gray-500 dark:text-gray-400">Click to search</span>
                 </div>
-                <span className="text-sm text-muted-foreground font-normal">
-                  Click to search
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Quick access to popular stocks - click any stock to search and add to your watchlist
+              </p>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 {[
-                  { symbol: 'AAPL', name: 'Apple Inc.', color: 'from-blue-500 to-blue-600' },
-                  { symbol: 'MSFT', name: 'Microsoft', color: 'from-green-500 to-green-600' },
-                  { symbol: 'GOOGL', name: 'Alphabet', color: 'from-red-500 to-red-600' },
-                  { symbol: 'TSLA', name: 'Tesla', color: 'from-purple-500 to-purple-600' },
-                  { symbol: 'NVDA', name: 'NVIDIA', color: 'from-green-600 to-green-700' },
-                  { symbol: 'AMZN', name: 'Amazon', color: 'from-orange-500 to-orange-600' },
-                  { symbol: 'META', name: 'Meta', color: 'from-blue-600 to-blue-700' },
-                  { symbol: 'NFLX', name: 'Netflix', color: 'from-red-600 to-red-700' },
-                  { symbol: 'JPM', name: 'JPMorgan', color: 'from-blue-700 to-blue-800' },
-                  { symbol: 'JNJ', name: 'Johnson & Johnson', color: 'from-red-700 to-red-800' },
-                  { symbol: 'PG', name: 'Procter & Gamble', color: 'from-blue-800 to-blue-900' },
-                  { symbol: 'UNH', name: 'UnitedHealth', color: 'from-green-700 to-green-800' }
+                  { symbol: 'AAPL', name: 'Apple Inc.' },
+                  { symbol: 'MSFT', name: 'Microsoft' },
+                  { symbol: 'GOOGL', name: 'Alphabet' },
+                  { symbol: 'TSLA', name: 'Tesla' },
+                  { symbol: 'NVDA', name: 'NVIDIA' },
+                  { symbol: 'AMZN', name: 'Amazon' },
+                  { symbol: 'META', name: 'Meta' },
+                  { symbol: 'NFLX', name: 'Netflix' },
+                  { symbol: 'JPM', name: 'JPMorgan' },
+                  { symbol: 'JNJ', name: 'Johnson & Johnson' },
+                  { symbol: 'PG', name: 'Procter & Gamble' },
+                  { symbol: 'UNH', name: 'UnitedHealth' }
                   ].map((stock) => (
-                  <button
+                  <div
                     key={stock.symbol}
-                    onClick={() => setSearchQuery(stock.symbol)}
-                    className="group flex flex-col items-center p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-all duration-200 hover:scale-105"
+                    onClick={() => {
+                      setSearchQuery(stock.symbol)
+                      // Focus on search input
+                      setTimeout(() => {
+                        const searchInput = document.querySelector('input[placeholder*="Search stocks"]') as HTMLInputElement
+                        if (searchInput) {
+                          searchInput.focus()
+                        }
+                      }, 100)
+                    }}
+                    className="cursor-pointer group"
                   >
-                    <div className={`w-12 h-12 bg-gradient-to-br ${stock.color} rounded-lg flex items-center justify-center mb-2 group-hover:shadow-lg transition-shadow`}>
-                            <span className="text-white font-bold text-sm">{stock.symbol[0]}</span>
+                    <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-all duration-200 hover:shadow-md">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform duration-200">
+                        <span className="text-white font-bold text-lg">{stock.symbol.charAt(0)}</span>
                           </div>
                     <div className="text-center">
-                      <div className="font-semibold text-sm group-hover:text-primary transition-colors">
-                        {stock.symbol}
+                        <div className="font-bold text-gray-900 dark:text-white text-sm mb-1">{stock.symbol}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400 leading-tight">{stock.name}</div>
                           </div>
-                      <div className="text-xs text-muted-foreground truncate max-w-[80px]">
-                        {stock.name}
                         </div>
                       </div>
-                  </button>
                 ))}
+              </div>
+            </div>
                     </div>
               
-              {/* Additional popular stocks in a horizontal scroll */}
-              <div className="mt-4">
-                <div className="text-sm text-muted-foreground mb-2">More Popular Stocks:</div>
+          {/* More Popular Stocks - Horizontal Buttons */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">More Popular Stocks</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Additional popular stocks you might be interested in
+              </p>
+            </div>
+            <div className="p-4">
                 <div className="flex flex-wrap gap-2">
                   {['HD', 'MA', 'V', 'PYPL', 'ADBE', 'CRM', 'INTC', 'AMD', 'ORCL', 'CSCO', 'IBM', 'QCOM'].map((symbol) => (
                     <button
                       key={symbol}
-                      onClick={() => setSearchQuery(symbol)}
-                      className="px-3 py-1 text-xs bg-muted hover:bg-primary hover:text-primary-foreground rounded-full transition-colors"
+                    onClick={() => {
+                      setSearchQuery(symbol)
+                      // Focus on search input
+                      setTimeout(() => {
+                        const searchInput = document.querySelector('input[placeholder*="Search stocks"]') as HTMLInputElement
+                        if (searchInput) {
+                          searchInput.focus()
+                        }
+                      }, 100)
+                    }}
+                    className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors duration-200 hover:shadow-sm"
                     >
                       {symbol}
                     </button>
                   ))}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
+          </div>
       </motion.div>
+      )}
 
       {/* Watchlist Summary */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="grid grid-cols-1 md:grid-cols-4 gap-6"
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Total Stocks</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalItems}</div>
-            <p className="text-xs text-muted-foreground">Stocks tracked</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Gainers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{gainers}</div>
-            <p className="text-xs text-muted-foreground">Up today</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Losers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{losers}</div>
-            <p className="text-xs text-muted-foreground">Down today</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Average Price</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${averagePrice.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Per stock</p>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-
-
-
-
-      {/* Watchlist Items */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-4"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Your Watchlist ({totalItems})</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Watchlist Summary</h2>
+          <Button
+            onClick={openCreateModal}
+            disabled={isCreatingWatchlist}
+            variant="outline"
+            size="sm"
+            className="flex items-center space-x-2"
+          >
+            {isCreatingWatchlist ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
+            <span>New Watchlist</span>
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2">
+                <Star className="w-5 h-5 text-blue-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Stocks</p>
+                  <p className="text-2xl font-bold">
+                    {getItemsToDisplay().length}
+                  </p>
+                </div>
+              </div>
+          </CardContent>
+        </Card>
+          
+        <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2">
+                <TrendingUp className="w-5 h-5 text-green-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Gainers</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {getItemsToDisplay().filter(item => (item.changePercent || 0) > 0).length}
+                  </p>
+                </div>
+              </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2">
+                <TrendingDown className="w-5 h-5 text-red-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Losers</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {getItemsToDisplay().filter(item => (item.changePercent || 0) < 0).length}
+                  </p>
+                </div>
+              </div>
+          </CardContent>
+        </Card>
+           
+        <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2">
+                <RefreshCw className="w-5 h-5 text-purple-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Change</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {(() => {
+                      const items = getItemsToDisplay()
+                      const totalChange = items.reduce((sum, item) => sum + (item.changePercent || 0), 0)
+                      return totalChange.toFixed(2)
+                    })()}%
+                  </p>
+                </div>
+              </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2">
+                <RefreshCw className="w-5 h-5 text-purple-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Last Updated</p>
+                  <p className="text-sm font-medium">
+                    {(() => {
+                      const items = getItemsToDisplay()
+                      return items.length > 0 
+                        ? new Date(Math.max(...items.map(item => new Date(item.addedAt).getTime()))).toLocaleTimeString()
+                        : 'Never'
+                    })()}
+                  </p>
+                </div>
+              </div>
+          </CardContent>
+        </Card>
+        </div>
+      </motion.div>
+
+      {/* Watchlist Management Section */}
+      {watchlists.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Your Watchlists</h2>
+            <Button
+              onClick={openCreateModal}
+              variant="outline"
+              size="sm"
+              className="flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Another</span>
+            </Button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {watchlists.map((watchlist) => (
+              <Card key={watchlist.id} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {watchlist.name}
+                    </CardTitle>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-full">
+                        {watchlist.items?.length || 0} stocks
+                      </span>
+                    </div>
+                  </div>
+                  <CardDescription className="text-sm text-gray-600 dark:text-gray-400">
+                    Created {new Date(watchlist.createdAt).toLocaleDateString()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
+                    {watchlist.items && watchlist.items.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Recent stocks:
+                        </p>
+                        {watchlist.items.slice(0, 3).map((item) => (
+                          <div key={item.id} className="flex items-center justify-between text-sm">
+                            <span className="font-medium">{item.symbol}</span>
+                            <span className="text-gray-500">${item.price?.toFixed(2) || 'N/A'}</span>
+                          </div>
+                        ))}
+                        {watchlist.items.length > 3 && (
+                          <p className="text-xs text-gray-500 text-center">
+                            +{watchlist.items.length - 3} more stocks
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        No stocks added yet
+                      </p>
+                    )}
+                    
+                    <div className="flex space-x-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleSelectWatchlist(watchlist.id)}
+                        disabled={activeWatchlistId === watchlist.id}
+                      >
+                        {activeWatchlistId === watchlist.id ? (
+                          <>
+                            <Check className="w-4 h-4 mr-2 text-green-600" />
+                            Active
+                          </>
+                        ) : (
+                          <>
+                            <Star className="w-4 h-4 mr-2 text-gray-500" />
+                            View
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleRemoveWatchlist(watchlist.id, watchlist.name)}
+                        disabled={removingWatchlistId === watchlist.id}
+                      >
+                        {removingWatchlistId === watchlist.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <X className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Watchlist Items */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-4"
+        id="watchlist-items-section"
+      >
+        {/* Show create watchlist prompt if no watchlists exist */}
+        {watchlists.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"
+          >
+            <Star className="w-16 h-16 text-blue-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Create Your First Watchlist
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+              Start tracking your favorite stocks by creating a watchlist. You can organize stocks by theme, sector, or any way you prefer.
+            </p>
+            <div className="space-y-3">
+              {!isAuthenticated || !user || !localStorage.getItem('token') ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p className="text-yellow-700 dark:text-yellow-300 text-sm">
+                      {!localStorage.getItem('token') 
+                        ? 'Your session has expired. Please log in again.' 
+                        : 'Please log in to create a watchlist'
+                      }
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={() => window.location.href = '/login'}
+                    className="px-6 py-3"
+                    size="lg"
+                    variant="outline"
+                  >
+                    Go to Login
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  onClick={openCreateModal}
+                  className="px-6 py-3"
+                  size="lg"
+                  disabled={isCreatingWatchlist}
+                >
+                  {isCreatingWatchlist ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5 mr-2" />
+                      Create Watchlist
+                    </>
+                  )}
+                </Button>
+              )}
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                After creating a watchlist, you can search and add stocks above
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Active Watchlist Header */}
+        {activeWatchlistId && watchlists.find(w => w.id === activeWatchlistId) && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <Star className="w-5 h-5 text-blue-600" />
+                <div>
+                  <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100">
+                    {watchlists.find(w => w.id === activeWatchlistId)?.name}
+                  </h3>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    {watchlists.find(w => w.id === activeWatchlistId)?.items?.length || 0} stocks • 
+                    Created {new Date(watchlists.find(w => w.id === activeWatchlistId)?.createdAt || '').toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveWatchlistId(null)}
+                className="text-blue-600 border-blue-300 hover:bg-blue-100"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Close
+              </Button>
+            </div>
+            
+            {/* Quick Actions for Selected Watchlist */}
+            <div className="flex items-center space-x-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+              <div className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                Quick Actions:
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setActiveWatchlistId(null)
+                  // Focus on search input
+                  setTimeout(() => {
+                    const searchInput = document.querySelector('input[placeholder*="Search stocks"]') as HTMLInputElement
+                    if (searchInput) {
+                      searchInput.focus()
+                    }
+                  }, 100)
+                }}
+                className="text-blue-600 border-blue-300 hover:bg-blue-100"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Stocks
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const watchlist = watchlists.find(w => w.id === activeWatchlistId)
+                  if (watchlist && watchlist.items && watchlist.items.length > 0) {
+                    handleClearAll()
+                  }
+                }}
+                className="text-red-600 border-red-300 hover:bg-red-100"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Clear All
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Only show watchlist items if watchlists exist */}
+        {watchlists.length > 0 && (
+          <>
+        <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">
+                {activeWatchlistId 
+                  ? `${watchlists.find(w => w.id === activeWatchlistId)?.name} Stocks`
+                  : 'All Watchlist Stocks'
+                } ({(() => {
+                  if (activeWatchlistId) {
+                    return watchlists.find(w => w.id === activeWatchlistId)?.items?.length || 0
+                  } else {
+                    // Count total stocks across all watchlists
+                    return watchlists.reduce((total, watchlist) => {
+                      return total + (watchlist.items?.length || 0)
+                    }, 0)
+                  }
+                })()})
+              </h2>
           {isConnectedToRealTime && (
             <div className="flex items-center space-x-2 text-sm text-green-600">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -923,106 +1645,137 @@ export default function WatchlistPage() {
         </div>
         
         <AnimatePresence mode="popLayout">
-          {filteredItems.length > 0 ? (
+              {(() => {
+                // Get items to show based on selection
+                const itemsToShow = getItemsToDisplay()
+                
+                return itemsToShow.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredItems.map((item) => (
-                <motion.div
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="relative group"
-                >
-                  <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-blue-500">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    {itemsToShow.map((item) => (
+                    <Card key={item.id} className="hover:shadow-md transition-shadow">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <CardTitle className="text-lg font-bold">{item.symbol}</CardTitle>
-                          <Badge variant="outline" className="text-xs">
-                            {item.exchange}
-                          </Badge>
+                            <div className="flex items-center space-x-3 mb-2">
+                              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-sm">{item.symbol[0]}</span>
                         </div>
-                        <CardDescription className="text-sm mt-1 line-clamp-2">
-                          {item.name}
-                        </CardDescription>
+                              <div>
+                                <div className="font-semibold">{item.symbol}</div>
+                                <div className="text-sm text-muted-foreground">{item.name}</div>
+                                <div className="text-xs text-muted-foreground">{item.exchange}</div>
                       </div>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <div className="text-lg font-bold">${item.price?.toFixed(2) || 'N/A'}</div>
+                              <div className={`text-sm ${(item.changePercent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {(item.change || 0) >= 0 ? '+' : ''}{item.change?.toFixed(2) || '0.00'} 
+                                ({(item.changePercent || 0).toFixed(2)}%)
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Volume: {(item.volume || 0).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col space-y-2">
                       <Button
-                        variant="ghost"
                         size="sm"
+                              variant="outline"
                         onClick={() => handleRemoveFromWatchlist(item.id)}
                         disabled={removingItemId === item.id}
-                        className="opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 transition-all h-8 w-8 p-0 disabled:opacity-50"
-                        title="Remove from watchlist"
+                              className="h-8 w-8 p-0"
                       >
                         {removingItemId === item.id ? (
-                          <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <X className="w-4 h-4" />
                         )}
                       </Button>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="space-y-3">
-                        {/* Price Display */}
-                        <div className="flex items-center justify-between">
-                          <div className="text-2xl font-bold">
-                            ${item.price.toFixed(2)}
-                          </div>
-                          <div className="text-right">
-                            <div className={`text-sm font-semibold ${item.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {item.changePercent >= 0 ? '+' : ''}{item.change.toFixed(2)}
-                            </div>
-                            <div className={`text-xs ${item.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
-                            </div>
+                            
+                              {isConnectedToRealTime && (
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                              )}
                           </div>
                         </div>
                         
-                        {/* Additional Info */}
+                          <div className="mt-3 pt-3 border-t">
                         <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Vol: {item.volume ? item.volume.toLocaleString() : 'N/A'}</span>
-                          <span>{item.exchange}</span>
+                              <span>Sector: {item.sector || 'N/A'}</span>
+                              <span>Industry: {item.industry || 'N/A'}</span>
                         </div>
-                        
-                        {/* Real-time indicator */}
-                        {isConnectedToRealTime && (
-                          <div className="flex items-center justify-center space-x-1 text-xs text-blue-600">
-                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
-                            <span>Live</span>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Added: {new Date(item.addedAt).toLocaleDateString()}
                           </div>
-                        )}
                       </div>
                     </CardContent>
                   </Card>
-                </motion.div>
               ))}
             </div>
           ) : (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-12"
-            >
-              <Star className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-muted-foreground">
-                {searchQuery ? 'No stocks found' : 'No stocks in watchlist'}
+                  <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <Star className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      {activeWatchlistId 
+                        ? `No stocks in "${watchlists.find(w => w.id === activeWatchlistId)?.name}"`
+                        : 'No stocks found'
+                      }
               </h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {searchQuery 
-                  ? 'Try adjusting your search' 
-                  : 'Add some stocks to start tracking their performance'
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">
+                      {activeWatchlistId 
+                        ? 'This watchlist is empty. Start adding stocks to track their performance.'
+                        : 'No stocks match your current filters. Try adjusting your search or filters.'
                 }
               </p>
-              {!searchQuery && (
-                <Button className="mt-4" onClick={() => setIsAddingSymbol(true)}>
+                    {activeWatchlistId && (
+                      <Button
+                        onClick={() => {
+                          setActiveWatchlistId(null)
+                          // Focus on search input
+                          setTimeout(() => {
+                            const searchInput = document.querySelector('input[placeholder*="Search stocks"]') as HTMLInputElement
+                            if (searchInput) {
+                              searchInput.focus()
+                            }
+                          }, 100)
+                        }}
+                        variant="outline"
+                        className="px-6 py-2"
+                      >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Stock
+                        Add Stocks
                 </Button>
+                    )}
+                  </div>
+                )
+              })()}
+            </AnimatePresence>
+          </>
               )}
             </motion.div>
+
+      {/* Floating Action Button - Always visible for creating watchlists */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="fixed bottom-6 right-6 z-50"
+      >
+        <Button
+          onClick={openCreateModal}
+          disabled={isCreatingWatchlist}
+          size="lg"
+          className="h-14 w-14 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          {isCreatingWatchlist ? (
+            <Loader2 className="w-6 h-6 animate-spin" />
+          ) : (
+            <Plus className="w-6 h-6" />
           )}
-        </AnimatePresence>
+        </Button>
+        <div className="absolute -top-2 -right-2 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-1 rounded-full font-medium">
+          Create
+        </div>
       </motion.div>
     </div>
   )

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
+import { Filter, X } from 'lucide-react';
 import FilterControls from './FilterControls';
 import ResultsTable from './ResultsTable';
 import { ScreenerStock, FilterCriteria, SortConfig } from '../../types/screener';
@@ -14,6 +15,7 @@ const StockScreener: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSearchQuery, setActiveSearchQuery] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{
     isProcessing: boolean;
     current: number;
@@ -121,7 +123,6 @@ const StockScreener: React.FC = () => {
     const loadInitialStocks = async () => {
       setLoading(true);
       setError(null);
-      console.log('🚀 Loading initial US stocks...');
       
       try {
         // Set up progress tracking for initial load
@@ -129,10 +130,10 @@ const StockScreener: React.FC = () => {
           isProcessing: true,
           current: 0,
           total: 100,
-          message: 'Loading stock tickers and fetching price data...'
+          message: 'Loading stock data...'
         });
         
-        const result = await fetchAllUSStocks(undefined, 100, (current: number, total: number, message: string) => {
+        const result = await fetchAllUSStocks(undefined, 40, (current: number, total: number, message: string) => {
           setBatchProgress({
             isProcessing: true,
             current,
@@ -141,20 +142,14 @@ const StockScreener: React.FC = () => {
           });
         });
         
-        console.log('📊 Initial US stocks loaded:', {
-          count: result.stocks.length,
-          hasMore: result.hasMore,
-          nextCursor: result.nextCursor
-        });
-        
         setAllStocks(result.stocks);
         setStocks(result.stocks);
         setNextCursor(result.nextCursor);
         setHasMore(result.hasMore);
         
-        toast.success(`Loaded ${result.stocks.length} US stocks with complete data`);
+        toast.success(`Loaded ${result.stocks.length} stocks`);
       } catch (error) {
-        console.error('❌ Error loading initial stocks:', error);
+        console.error('Error loading initial stocks:', error);
         setError('Failed to load initial stock data');
         toast.error('Failed to load stock data');
       } finally {
@@ -173,7 +168,6 @@ const StockScreener: React.FC = () => {
     }
 
     setLoadingMore(true);
-    console.log('📈 Loading more US stocks with cursor:', nextCursor);
     
     try {
       // Set up progress tracking for loading more stocks
@@ -181,22 +175,16 @@ const StockScreener: React.FC = () => {
         isProcessing: true,
         current: 0,
         total: 100,
-        message: 'Loading additional stocks and fetching price data...'
+        message: 'Loading additional stocks...'
       });
       
-      const result = await fetchAllUSStocks(nextCursor, 100, (current: number, total: number, message: string) => {
+      const result = await fetchAllUSStocks(nextCursor, 40, (current: number, total: number, message: string) => {
         setBatchProgress({
           isProcessing: true,
           current,
           total,
           message
         });
-      });
-      
-      console.log('📊 Additional US stocks loaded:', {
-        count: result.stocks.length,
-        hasMore: result.hasMore,
-        nextCursor: result.nextCursor
       });
       
       const newAllStocks = [...allStocks, ...result.stocks];
@@ -210,9 +198,13 @@ const StockScreener: React.FC = () => {
       setNextCursor(result.nextCursor);
       setHasMore(result.hasMore);
       
-      toast.success(`Loaded ${result.stocks.length} more stocks with complete data. Total: ${newAllStocks.length}`);
+      if (result.hasMore) {
+        toast.success(`Loaded ${result.stocks.length} more stocks. Total: ${newAllStocks.length}`);
+      } else {
+        toast.success(`Loaded ${result.stocks.length} more stocks. All stocks loaded! Total: ${newAllStocks.length}`);
+      }
     } catch (error) {
-      console.error('❌ Error loading more stocks:', error);
+      console.error('Error loading more stocks:', error);
       toast.error('Failed to load more stocks');
     } finally {
       setLoadingMore(false);
@@ -223,16 +215,12 @@ const StockScreener: React.FC = () => {
   const applyFilters = async () => {
     setLoading(true);
     setError(null);
-    console.log('🔍 Starting universal filter application with filters:', filters);
     
     try {
-      // Use enterprise-grade screening for optimal results
-      console.log('🏢 Using professional screening across complete market');
-      
       const polygonService = new PolygonApiService();
       const result = await polygonService.getUniversalScreenerResults(
         filters,
-        100, // limit
+        40, // limit - load 40 stocks at a time
         (current: number, total: number, message: string) => {
           setBatchProgress({
             isProcessing: true,
@@ -243,39 +231,29 @@ const StockScreener: React.FC = () => {
         }
       );
       
-      console.log(`🏢 Professional screening returned ${result.stocks.length} stocks with complete data`);
-      
       // Apply sorting
       const sortedResults = sortStocks(result.stocks, sortConfig);
       setStocks(sortedResults);
       
       if (sortedResults.length === 0) {
-        console.warn('⚠️ No stocks found after filtering. Check if filters are too restrictive.');
         toast.warning('No stocks found matching your criteria. Try adjusting your filters.');
       } else {
-        console.log(`✅ Successfully found ${sortedResults.length} stocks using professional screening`);
-        toast.success(`Found ${sortedResults.length} stocks with real-time data`);
+        toast.success(`Found ${sortedResults.length} stocks`);
       }
     } catch (error) {
-      console.error('❌ Error applying universal filters:', error);
-      console.error('❌ Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        filters: filters
-      });
+      console.error('Error applying filters:', error);
       
       // Fallback to client-side filtering on server-side failure
-      console.log('🔄 Falling back to client-side filtering on loaded stocks');
       try {
         const fallbackResults = applyClientSideFilters(allStocks, filters);
         const sortedFallback = sortStocks(fallbackResults, sortConfig);
         setStocks(sortedFallback);
-        toast.warning(`Professional screening failed. Showing ${sortedFallback.length} results from loaded stocks.`);
+        toast.warning(`Showing ${sortedFallback.length} results from loaded stocks.`);
       } catch (fallbackError) {
-        console.error('❌ Fallback filtering also failed:', fallbackError);
+        console.error('Fallback filtering failed:', fallbackError);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         if (errorMessage.includes('API key')) {
-          setError('API configuration issue. Please check your Polygon.io API key.');
+          setError('API configuration issue. Please check your API key.');
         } else if (errorMessage.includes('rate limit')) {
           setError('API rate limit exceeded. Please try again in a moment.');
         } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
@@ -313,18 +291,12 @@ const StockScreener: React.FC = () => {
       setError(null);
       
       try {
-        console.log('🔍 Searching for stocks:', searchTerm);
         const searchResults = await searchStocks(searchTerm);
         
         // Apply additional filters to search results
         const filteredResults = applyClientSideFilters(searchResults, filters);
         const sortedResults = sortStocks(filteredResults, sortConfig);
         setStocks(sortedResults);
-        
-        console.log('📊 Search results:', {
-          searchTerm,
-          count: sortedResults.length
-        });
         
         if (sortedResults.length === 0) {
           toast.info(`No stocks found matching "${searchTerm}"`);
@@ -420,21 +392,51 @@ const StockScreener: React.FC = () => {
   }, [stocks]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-6">
-
+      <div className="bg-card border-b border-border shadow-sm">
+        <div className="px-4 lg:px-6 py-3 lg:py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl lg:text-2xl font-bold text-foreground">
+                  Stock Screener
+                </h1>
+                {/* Mobile Filter Toggle */}
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="lg:hidden p-2 rounded-md bg-muted hover:bg-muted/80 transition-colors"
+                >
+                  <Filter className="w-4 h-4 text-foreground" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Filters Sidebar */}
-          <div className="lg:col-span-1">
+      <div className="flex-1 flex flex-col lg:flex-row h-[calc(100vh-120px)]">
+        {/* Mobile Filter Overlay */}
+        {showFilters && (
+          <div 
+            className="lg:hidden fixed inset-0 bg-black/50 z-40"
+            onClick={() => setShowFilters(false)}
+          />
+        )}
+        
+        {/* Filters Sidebar */}
+        <div className={`${showFilters ? 'block' : 'hidden'} lg:block lg:w-80 xl:w-96 bg-card border-r border-border overflow-y-auto order-2 lg:order-1 screener-filters-sidebar ${showFilters ? 'show' : ''}`}>
+          <div className="p-4 lg:p-6">
+            <div className="lg:hidden flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground">Filters</h2>
+              <button
+                onClick={() => setShowFilters(false)}
+                className="p-2 rounded-md hover:bg-muted transition-colors"
+              >
+                <X className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
             <FilterControls
               filters={filters}
               onFilterChange={handleFilterChange}
@@ -447,7 +449,7 @@ const StockScreener: React.FC = () => {
             
             {/* Batch Processing Progress Indicator */}
             {batchProgress.isProcessing && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -477,7 +479,7 @@ const StockScreener: React.FC = () => {
             )}
             
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
@@ -506,59 +508,24 @@ const StockScreener: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Results */}
-          <div className="lg:col-span-3">
-            <ResultsTable
-              stocks={stocks}
-              loading={loading}
-              error={error || undefined}
-              sortConfig={sortConfig}
-              onSort={handleSort}
-              hasMore={hasMore}
-              loadingMore={loadingMore}
-              onLoadMore={loadMoreStocks}
-              onExportCSV={exportToCSV}
-            />
-            
-            {/* Load More Button */}
-            {hasMore && !loading && (
-              <div className="mt-6 text-center">
-                <button
-                  onClick={loadMoreStocks}
-                  disabled={loadingMore}
-                  className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loadingMore ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Loading More...
-                    </>
-                  ) : (
-                    <>
-                      Load More Stocks
-                      <svg className="ml-2 -mr-1 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </>
-                  )}
-                </button>
-                <p className="mt-2 text-sm text-gray-500">
-                  Showing {allStocks.length} stocks. Click to load more.
-                </p>
-              </div>
-            )}
-            
-            {!hasMore && allStocks.length > 0 && (
-              <div className="mt-6 text-center">
-                <p className="text-sm text-gray-500">
-                  All available stocks loaded ({allStocks.length} total)
-                </p>
-              </div>
-            )}
+        {/* Results */}
+        <div className="flex-1 bg-background overflow-hidden order-1 lg:order-2">
+          <div className="h-full flex flex-col">
+            <div className="flex-1 overflow-hidden">
+              <ResultsTable
+                stocks={stocks}
+                loading={loading}
+                error={error || undefined}
+                sortConfig={sortConfig}
+                onSort={handleSort}
+                hasMore={hasMore}
+                loadingMore={loadingMore}
+                onLoadMore={loadMoreStocks}
+                onExportCSV={exportToCSV}
+              />
+            </div>
           </div>
         </div>
       </div>

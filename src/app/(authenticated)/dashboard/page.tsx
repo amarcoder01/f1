@@ -6,30 +6,39 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { 
-  Eye, 
   Plus,
   Star,
   BarChart3,
   Target,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Eye,
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react'
-import { useAuthStore, useWatchlistStore, usePortfolioStore } from '@/store'
+import { useAuthStore, usePortfolioStore, useWatchlistStore } from '@/store'
 import { useRouter } from 'next/navigation'
 
 export default function Dashboard() {
-  const { user } = useAuthStore()
-  const { watchlists, loadWatchlists, isLoading: watchlistsLoading } = useWatchlistStore()
+  const { user, isAuthenticated } = useAuthStore()
   const { portfolios } = usePortfolioStore()
+  const { watchlists, loadWatchlists, clearWatchlists, isLoading: watchlistsLoading } = useWatchlistStore()
   const router = useRouter()
   
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(null)
 
   // Load user data on component mount
   useEffect(() => {
     const loadUserData = async () => {
       try {
-        await loadWatchlists()
+        // Only load watchlists if user is authenticated
+        if (isAuthenticated && user) {
+          console.log('🔐 Dashboard: User authenticated, loading watchlists for user:', user.id)
+          await loadWatchlists()
+        } else {
+          console.log('🔐 Dashboard: User not authenticated, skipping watchlist load')
+        }
       } catch (error) {
         console.error('Error loading user data:', error)
       } finally {
@@ -38,62 +47,77 @@ export default function Dashboard() {
     }
 
     loadUserData()
-  }, [loadWatchlists])
+  }, [loadWatchlists, isAuthenticated, user])
 
+  // Clear watchlist data when user logs out
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      console.log('🔐 Dashboard: User logged out, clearing watchlist data')
+      clearWatchlists() // Clear watchlist data from store when user is not authenticated
+    }
+  }, [isAuthenticated, user, clearWatchlists])
 
+  // Helper function to get items to display based on current selection
+  const getItemsToDisplay = () => {
+    if (selectedWatchlistId) {
+      // Return items from specific watchlist
+      return watchlists.find(w => w.id === selectedWatchlistId)?.items || []
+    } else {
+      // Return all items from all watchlists combined
+      return watchlists.reduce((allItems: any[], watchlist) => {
+        if (watchlist.items && watchlist.items.length > 0) {
+          return [...allItems, ...watchlist.items]
+        }
+        return allItems
+      }, [])
+    }
+  }
 
-  // Calculate total watchlist items (not just watchlists)
-  const totalWatchlistItems = watchlists.reduce((total, watchlist) => {
-    // Only count items in watchlists that actually have items
-    return total + (watchlist.items?.length || 0)
-  }, 0)
+  // Get default watchlist only for authenticated users
+  const defaultWatchlist = isAuthenticated && user ? watchlists?.find(w => w.name === 'My Watchlist') : null
+  const watchlistItems = getItemsToDisplay()
 
-  // Count only watchlists that have items or are user-created (not auto-created empty ones)
-  const activeWatchlists = watchlists.filter(watchlist => {
-    // Count watchlists that have items OR are not the default "My Watchlist" when empty
-    return (watchlist.items?.length || 0) > 0 || watchlist.name !== 'My Watchlist'
-  })
+  // Calculate watchlist statistics only for authenticated users
+  const totalStocks = watchlistItems.length
+  const gainers = watchlistItems.filter(item => (item.changePercent || 0) > 0).length
+  const losers = watchlistItems.filter(item => (item.changePercent || 0) < 0).length
+  const totalChangePercent = totalStocks > 0 
+    ? watchlistItems.reduce((sum, item) => sum + (item.changePercent || 0), 0) / totalStocks 
+    : 0
 
-  // Check if user is new (no data)
-  const isNewUser = totalWatchlistItems === 0
+  // Check if user is new (no portfolios and no watchlist items)
+  const isNewUser = portfolios.length === 0 && totalStocks === 0
 
-  // Additional check: If there are no watchlists at all, definitely show welcome
-  const hasNoWatchlists = watchlists.length === 0
-  const shouldShowWelcome = isNewUser || hasNoWatchlists
-
-  // Debug logging - moved after all variables are defined
-  console.log('🔍 Dashboard Debug - Watchlist Data:', {
-    totalWatchlists: watchlists.length,
-    totalWatchlistItems,
-    activeWatchlists: activeWatchlists.length,
-    watchlists: watchlists.map(w => ({
-      id: w.id,
-      name: w.name,
-      itemCount: w.items?.length || 0,
-      items: w.items?.map(item => item.symbol) || []
-    })),
-    isNewUser
-  })
-
-  // Additional debug: Check if any watchlist has items
-  const watchlistsWithItems = watchlists.filter(w => (w.items?.length || 0) > 0)
-  console.log('🔍 Watchlists with items:', watchlistsWithItems.map(w => ({
-    name: w.name,
-    items: w.items?.map(item => item.symbol) || []
-  })))
-
-
-
-  if (isLoading) {
+  // Show loading state while checking authentication
+  if (isLoading || watchlistsLoading) {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(3)].map((_, i) => (
               <div key={i} className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
             ))}
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show authentication required message if user is not authenticated
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-12">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            Authentication Required
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Please log in to view your personalized dashboard and watchlist.
+          </p>
+          <Button onClick={() => router.push('/login')}>
+            Go to Login
+          </Button>
         </div>
       </div>
     )
@@ -114,7 +138,7 @@ export default function Dashboard() {
       </div>
 
       {/* New User Welcome Section */}
-      {shouldShowWelcome && (
+      {isNewUser && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -154,29 +178,246 @@ export default function Dashboard() {
         </motion.div>
       )}
 
-      {/* Portfolio Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Watchlist Items */}
-        <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-sm font-medium text-purple-700 dark:text-purple-300">
-              <span>Watchlist Items</span>
-              <Eye className="w-4 h-4" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-              {totalWatchlistItems || 0}
+      {/* Quick Watchlist Summary - show for all users with watchlists */}
+      {!isNewUser && watchlists.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Star className="w-8 h-8 text-green-600" />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {selectedWatchlistId 
+                    ? `${watchlists.find(w => w.id === selectedWatchlistId)?.name} Summary`
+                    : 'Watchlist Summary'
+                  }
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {totalStocks} stocks • {gainers} gainers • {losers} losers
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-              Stocks tracked
+            <div className="flex items-center space-x-2">
+              {watchlists.length > 1 && (
+                <select
+                  value={selectedWatchlistId || ''}
+                  onChange={(e) => setSelectedWatchlistId(e.target.value || null)}
+                  className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-green-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="">All Watchlists</option>
+                  {watchlists.map((watchlist) => (
+                    <option key={watchlist.id} value={watchlist.id}>
+                      {watchlist.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => router.push('/watchlist')}
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                View Details
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Watchlist Overview - only show if user has stocks */}
+      {totalStocks > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {selectedWatchlistId 
+                ? `${watchlists.find(w => w.id === selectedWatchlistId)?.name} Overview`
+                : 'Your Watchlist'
+              }
+            </h2>
+            <div className="flex items-center space-x-3">
+              {/* Watchlist Selector */}
+              {watchlists.length > 0 && (
+                <select
+                  value={selectedWatchlistId || ''}
+                  onChange={(e) => setSelectedWatchlistId(e.target.value || null)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                >
+                  <option value="">All Watchlists</option>
+                  {watchlists.map((watchlist) => (
+                    <option key={watchlist.id} value={watchlist.id}>
+                      {watchlist.name} ({watchlist.items?.length || 0} stocks)
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button variant="outline" onClick={() => router.push('/watchlist')}>
+                View All
+              </Button>
+            </div>
+          </div>
+          
+          {/* Watchlist Status Indicator */}
+          {selectedWatchlistId && watchlists.find(w => w.id === selectedWatchlistId) && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    Currently viewing: <strong>{watchlists.find(w => w.id === selectedWatchlistId)?.name}</strong>
+                  </span>
+                </div>
+                <div className="flex items-center space-x-4 text-sm text-blue-700 dark:text-blue-300">
+                  <span>
+                    📊 {watchlists.find(w => w.id === selectedWatchlistId)?.items?.length || 0} stocks
+                  </span>
+                  <span>
+                    📅 Created {new Date(watchlists.find(w => w.id === selectedWatchlistId)?.createdAt || '').toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Watchlist Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
+                    <Star className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Stocks</p>
+                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{totalStocks}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-green-600 dark:text-green-400">Gainers</p>
+                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">{gainers}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-red-500 rounded-lg flex items-center justify-center">
+                    <TrendingDown className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-red-600 dark:text-red-400">Losers</p>
+                    <p className="text-2xl font-bold text-red-900 dark:text-red-100">{losers}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
+                    <BarChart3 className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-purple-600 dark:text-purple-400">Avg Change</p>
+                    <p className={`text-2xl font-bold ${totalChangePercent >= 0 ? 'text-green-900 dark:text-green-100' : 'text-red-900 dark:text-red-100'}`}>
+                      {totalChangePercent >= 0 ? '+' : ''}{totalChangePercent.toFixed(2)}%
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Recent Watchlist Items */}
+          <Card>
+            <CardHeader>
+              <h3 className="text-lg font-semibold">
+                {selectedWatchlistId 
+                  ? `Recent ${watchlists.find(w => w.id === selectedWatchlistId)?.name} Items`
+                  : 'Recent Watchlist Items'
+                }
+              </h3>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {watchlistItems.slice(0, 5).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">{item.symbol[0]}</span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white">{item.symbol}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{item.name}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-gray-900 dark:text-white">${item.price?.toFixed(2) || 'N/A'}</p>
+                      <p className={`text-sm ${(item.changePercent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(item.changePercent || 0) >= 0 ? '+' : ''}{(item.changePercent || 0).toFixed(2)}%
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Show create watchlist prompt if no watchlist exists */}
+      {isAuthenticated && user && totalStocks === 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+            <Star className="w-16 h-16 text-blue-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Start Tracking Your Favorite Stocks
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+              Create a watchlist to track stocks you're interested in and monitor their performance in real-time.
             </p>
-          </CardContent>
-        </Card>
-      </div>
+            <div className="space-y-3">
+              <Button 
+                onClick={() => router.push('/watchlist')}
+                className="px-6 py-3"
+                size="lg"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Create Watchlist
+              </Button>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                You'll be able to search and add stocks to your watchlist
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Quick Actions for New Users */}
-      {shouldShowWelcome && (
+      {isNewUser && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>

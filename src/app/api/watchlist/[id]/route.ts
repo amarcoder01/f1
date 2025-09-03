@@ -35,7 +35,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await DatabaseService.deleteWatchlist(params.id)
+    await DatabaseService.deleteWatchlistById(params.id)
     
     return NextResponse.json({
       success: true,

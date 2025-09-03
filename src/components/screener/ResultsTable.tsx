@@ -3,7 +3,6 @@
 import React from 'react';
 import { ChevronUp, ChevronDown, TrendingUp, TrendingDown, Download, Loader2 } from 'lucide-react';
 import { ScreenerStock, SortConfig } from '@/types/screener';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -106,195 +105,161 @@ const ResultsTable: React.FC<ResultsTableProps> = ({
     );
   }
 
+  const columns = [
+    { field: 'ticker' as keyof ScreenerStock, label: 'Symbol', width: 'w-20' },
+    { field: 'name' as keyof ScreenerStock, label: 'Company Name', width: 'w-48' },
+    { field: 'price' as keyof ScreenerStock, label: 'Price', width: 'w-24' },
+    { field: 'change' as keyof ScreenerStock, label: 'Change', width: 'w-24' },
+    { field: 'change_percent' as keyof ScreenerStock, label: 'Change %', width: 'w-24' },
+    { field: 'volume' as keyof ScreenerStock, label: 'Volume', width: 'w-24' },
+    { field: 'market_cap' as keyof ScreenerStock, label: 'Market Cap', width: 'w-28' },
+    { field: 'sector' as keyof ScreenerStock, label: 'Sector', width: 'w-32' },
+    { field: 'exchange' as keyof ScreenerStock, label: 'Exchange', width: 'w-20' },
+  ];
+
   return (
-    <Card>
-      <CardHeader>
+    <div className="bg-card rounded-lg shadow-sm h-full flex flex-col">
+      {/* Header */}
+      <div className="p-6 border-b border-border flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Screening Results</CardTitle>
+            <h2 className="text-lg font-semibold text-foreground">
+              Screening Results
+            </h2>
             <p className="text-sm text-muted-foreground">
-              {stocks.length} stocks found with real-time data
+              {stocks.length} stocks found • {stocks.length > 0 ? 'Real-time data' : 'Apply filters to see results'}
             </p>
           </div>
-          <Badge variant="secondary">
-            {stocks.length} Results
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('ticker')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Symbol</span>
-                    {getSortIcon('ticker')}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('name')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Company Name</span>
-                    {getSortIcon('name')}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('price')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Price</span>
-                    {getSortIcon('price')}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('change')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Change</span>
-                    {getSortIcon('change')}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('change_percent')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Change %</span>
-                    {getSortIcon('change_percent')}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('volume')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Volume</span>
-                    {getSortIcon('volume')}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('market_cap')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Market Cap</span>
-                    {getSortIcon('market_cap')}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('sector')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Sector</span>
-                    {getSortIcon('sector')}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:bg-accent"
-                  onClick={() => handleSort('exchange')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Exchange</span>
-                    {getSortIcon('exchange')}
-                  </div>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stocks.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
-                    <div className="text-muted-foreground">
-                      No stocks found matching your criteria
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                stocks.map((stock) => (
-                  <TableRow key={stock.ticker} className="hover:bg-accent/50">
-                    <TableCell className="font-medium">
-                      <span className="font-mono">{stock.ticker}</span>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {stock.name}
-                    </TableCell>
-                    <TableCell>
-                      {stock.price ? `$${formatNumber(stock.price)}` : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {stock.change !== undefined ? (
-                        <div className="flex items-center space-x-1">
-                          {stock.change >= 0 ? (
-                            <TrendingUp className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <TrendingDown className="w-4 h-4 text-red-600" />
-                          )}
-                          <span className={getPercentageColor(stock.change)}>
-                            {formatNumber(stock.change)}
-                          </span>
-                        </div>
-                      ) : (
-                        'N/A'
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <span className={getPercentageColor(stock.change_percent)}>
-                        {formatPercentage(stock.change_percent)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {formatVolume(stock.volume)}
-                    </TableCell>
-                    <TableCell>
-                      {formatMarketCap(stock.market_cap)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {stock.sector || 'N/A'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-muted-foreground">
-                        {stock.exchange || 'N/A'}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Load More Button */}
-        {hasMore && (
-          <div className="mt-4 flex justify-center">
-            <Button
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onExportCSV}
+              disabled={stocks.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+            <button
               onClick={onLoadMore}
-              disabled={loadingMore}
-              variant="outline"
+              disabled={!hasMore || loadingMore}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loadingMore ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Loading more...
-                </>
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                'Load More Stocks'
+                <ChevronDown className="w-4 h-4" />
               )}
-            </Button>
+              {loadingMore ? 'Loading...' : hasMore ? 'Load More' : 'All Loaded'}
+            </button>
+            {!hasMore && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground px-2">
+                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                <span>All stocks loaded</span>
+              </div>
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-auto screener-table-container">
+        <div className="min-w-full">
+          <table className="w-full">
+            <thead className="bg-muted/50 sticky top-0 z-10">
+              <tr>
+                {columns.map((column) => (
+                  <th
+                    key={column.field}
+                    className={`${column.width} px-3 lg:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted transition-colors`}
+                    onClick={() => onSort(column.field)}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span className="hidden sm:inline">{column.label}</span>
+                      <span className="sm:hidden">{column.label.split(' ')[0]}</span>
+                      {getSortIcon(column.field)}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-card divide-y divide-border">
+              {stocks.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-3 lg:px-6 py-12 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center">
+                      <TrendingUp className="w-12 h-12 text-muted-foreground/30 mb-4" />
+                      <p className="text-lg font-medium">No stocks found</p>
+                      <p className="text-sm text-center">Try adjusting your filters to see more results</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                stocks.map((stock) => (
+                  <tr key={stock.ticker} className="hover:bg-muted/50 transition-colors">
+                    <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-foreground">
+                        {stock.ticker}
+                      </div>
+                    </td>
+                    <td className="px-3 lg:px-6 py-3 lg:py-4">
+                      <div className="text-sm text-foreground truncate max-w-32 lg:max-w-48" title={stock.name}>
+                        {stock.name}
+                      </div>
+                    </td>
+                    <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-foreground">
+                        ${formatNumber(stock.price)}
+                      </div>
+                    </td>
+                    <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
+                      <div className={`text-sm font-medium flex items-center gap-1 ${getPercentageColor(stock.change)}`}>
+                        {stock.change !== undefined && stock.change !== null && (
+                          stock.change >= 0 ? (
+                            <TrendingUp className="w-3 h-3" />
+                          ) : (
+                            <TrendingDown className="w-3 h-3" />
+                          )
+                        )}
+                        <span className="hidden sm:inline">${formatNumber(stock.change)}</span>
+                        <span className="sm:hidden">{formatNumber(stock.change)}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
+                      <div className={`text-sm font-medium ${getPercentageColor(stock.changePercent)}`}>
+                        {formatPercentage(stock.changePercent)}
+                      </div>
+                    </td>
+                    <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
+                      <div className="text-sm text-foreground">
+                        <span className="hidden sm:inline">{formatVolume(stock.volume)}</span>
+                        <span className="sm:hidden">{formatVolume(stock.volume).replace(/[A-Z]/g, '')}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
+                      <div className="text-sm text-foreground">
+                        <span className="hidden sm:inline">{formatMarketCap(stock.market_cap)}</span>
+                        <span className="sm:hidden">{formatMarketCap(stock.market_cap).replace(/[A-Z]/g, '')}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 lg:px-6 py-3 lg:py-4">
+                      <div className="text-sm text-foreground truncate max-w-24 lg:max-w-32" title={stock.sector}>
+                        {stock.sector || 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-0.5 lg:px-2.5 lg:py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        <span className="hidden sm:inline">{stock.exchange}</span>
+                        <span className="sm:hidden">{stock.exchange?.slice(0, 3)}</span>
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 };
 

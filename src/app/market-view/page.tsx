@@ -14,6 +14,7 @@ export default function MarketViewPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorType, setErrorType] = useState<'NETWORK_ERROR' | 'API_ERROR' | 'MARKET_CLOSED' | null>(null)
   const [nextCursor, setNextCursor] = useState<string | undefined>()
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null)
   const [stockDetails, setStockDetails] = useState<StockDetails | null>(null)
@@ -24,7 +25,37 @@ export default function MarketViewPage() {
   const [isMarketClosed, setIsMarketClosed] = useState(false)
 
   useEffect(() => {
-    loadInitialStocks()
+    const initializeMarketView = async () => {
+      try {
+        setError(null)
+        setErrorType(null)
+        
+        // Test connection first
+        const connectionTest = await marketViewApiService.testConnection()
+        
+        if (connectionTest.success) {
+          // Only load stocks if connection is successful
+          await loadInitialStocks()
+        } else {
+          // Show the specific error message from the connection test
+          setError(connectionTest.message)
+          // Determine if it's a network error or API error based on the message
+          if (connectionTest.message.includes('Network connection failed') || 
+              connectionTest.message.includes('unable to reach') ||
+              connectionTest.message.includes('timed out')) {
+            setErrorType('NETWORK_ERROR')
+          } else {
+            setErrorType('API_ERROR')
+          }
+        }
+      } catch (err) {
+        console.error('Failed to initialize Market View:', err)
+        setError('Failed to initialize Market View - unexpected error occurred')
+        setErrorType('NETWORK_ERROR')
+      }
+    }
+    
+    initializeMarketView()
     setIsMarketClosed(marketViewApiService.isMarketClosed())
   }, [])
 
@@ -32,12 +63,24 @@ export default function MarketViewPage() {
     try {
       setLoading(true)
       setError(null)
+      setErrorType(null)
+      
       const { stocks: initialStocks, nextCursor: cursor } = await marketViewApiService.getStocks(50)
+      
       setStocks(initialStocks)
       setNextCursor(cursor)
+      setError(null) // Ensure error is cleared
+      setErrorType(null) // Ensure error type is cleared
     } catch (err) {
+      console.error('Error loading stocks:', err)
       const error = err as AppError
+      
+      // Clear any previous successful state
+      setStocks([])
+      setNextCursor(undefined)
+      
       setError(error.message || 'Failed to load stocks')
+      setErrorType(error.type || 'API_ERROR')
     } finally {
       setLoading(false)
     }
@@ -49,12 +92,15 @@ export default function MarketViewPage() {
     try {
       setLoadingMore(true)
       setError(null)
+      setErrorType(null)
+      
       const { stocks: moreStocks, nextCursor: cursor } = await marketViewApiService.getStocks(50, nextCursor)
       setStocks(prev => [...prev, ...moreStocks])
       setNextCursor(cursor)
     } catch (err) {
       const error = err as AppError
       setError(error.message || 'Failed to load more stocks')
+      setErrorType(error.type || 'API_ERROR')
     } finally {
       setLoadingMore(false)
     }
@@ -72,11 +118,14 @@ export default function MarketViewPage() {
       setIsSearching(true)
       setSearchQuery(query)
       setError(null)
+      setErrorType(null)
+      
       const results = await marketViewApiService.searchStocks(query)
       setSearchResults(results)
     } catch (err) {
       const error = err as AppError
       setError(error.message || 'Search failed')
+      setErrorType(error.type || 'API_ERROR')
       setSearchResults([])
     } finally {
       setIsSearching(false)
@@ -94,6 +143,7 @@ export default function MarketViewPage() {
     } catch (err) {
       const error = err as AppError
       setError(error.message || 'Failed to load stock details')
+      setErrorType(error.type || 'API_ERROR')
     } finally {
       setModalLoading(false)
     }
@@ -110,8 +160,39 @@ export default function MarketViewPage() {
     setSearchQuery('')
   }
 
+  const retryConnection = async () => {
+    try {
+      console.log('🔄 Retrying connection...')
+      setError(null)
+      setErrorType(null)
+      
+      // Test connection first
+      const connectionTest = await marketViewApiService.testConnection()
+      console.log('🔍 Retry connection test result:', connectionTest)
+      
+      if (connectionTest.success) {
+        // Load stocks if connection is successful
+        await loadInitialStocks()
+      } else {
+        setError(connectionTest.message)
+        setErrorType('NETWORK_ERROR')
+      }
+    } catch (err) {
+      console.error('❌ Retry connection failed:', err)
+      setError('Failed to retry connection')
+      setErrorType('NETWORK_ERROR')
+    }
+  }
+
   const displayedStocks = searchQuery ? searchResults : stocks
   const showLoadMore = !searchQuery && nextCursor && !loading
+
+  const getErrorIcon = () => {
+    if (errorType === 'NETWORK_ERROR') {
+      return <AlertCircle className="h-5 w-5 text-red-400" />
+    }
+    return <AlertCircle className="h-5 w-5 text-red-400" />
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -160,9 +241,32 @@ export default function MarketViewPage() {
         {/* Error Message */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-              <p className="text-red-800">{error}</p>
+            <div className="flex items-start">
+              {getErrorIcon()}
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-red-800">
+                  {errorType === 'NETWORK_ERROR' ? 'Connection Error' : 'API Error'}
+                </h3>
+                <p className="mt-1 text-sm text-red-700">{error}</p>
+                <div className="mt-3 flex space-x-3">
+                  {errorType === 'NETWORK_ERROR' && (
+                    <button
+                      onClick={retryConnection}
+                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
+                    >
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Retry Connection
+                    </button>
+                  )}
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
+                  >
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Refresh Page
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

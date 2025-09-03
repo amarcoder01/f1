@@ -1,75 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withAuth, createAuthenticatedResponse, createErrorResponse } from '@/lib/auth-middleware'
 import { DatabaseService } from '@/lib/db'
-import { AuthService } from '@/lib/auth-service'
 
-// GET - Get user's watchlists
-export async function GET(request: NextRequest) {
+async function getWatchlistsHandler(request: NextRequest) {
   try {
-    console.log('🔍 API: Getting watchlists...')
+    // User is already authenticated by the middleware
+    const user = (request as any).user
     
-    // Get user from token
-    const token = request.cookies.get('token')?.value
-    let user
-
-    if (token) {
-      // Try to get authenticated user
-      user = await AuthService.getUserFromToken(token)
+    if (!user || !user.id) {
+      return createErrorResponse('User not found', 401)
     }
 
-    if (!user) {
-      // Fallback to demo user for unauthenticated requests
-      user = await DatabaseService.getOrCreateDemoUser()
-    }
-
-    const watchlists = await DatabaseService.getUserWatchlists(user.id)
+    console.log('🔍 API: Getting watchlists for user:', user.id)
     
-    console.log(`✅ Database: Found ${watchlists.length} watchlists for user ${user.id}`)
-    return NextResponse.json({
+    const watchlists = await DatabaseService.getWatchlists(user.id)
+    
+    console.log('✅ API: Successfully retrieved watchlists:', watchlists.length)
+    
+    return createAuthenticatedResponse({
       success: true,
       data: watchlists
     })
+    
   } catch (error) {
-    console.error('❌ Error getting watchlists:', error)
-    return NextResponse.json(
-      { success: false, message: 'Failed to get watchlists' },
-      { status: 500 }
-    )
+    console.error('❌ API: Error getting watchlists:', error)
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Engine is not yet connected')) {
+        return createErrorResponse(
+          'Database service is starting up. Please try again in a moment.',
+          503
+        )
+      }
+      
+      return createErrorResponse(error.message, 500)
+    }
+    
+    return createErrorResponse('Failed to retrieve watchlists', 500)
   }
 }
 
 // POST - Create a new watchlist
-export async function POST(request: NextRequest) {
+async function createWatchlistHandler(request: NextRequest) {
   try {
     const { name } = await request.json()
     
     console.log(`🔍 API: Creating watchlist "${name}"...`)
     
-    // Get user from token
-    const token = request.cookies.get('token')?.value
-    let user
-
-    if (token) {
-      // Try to get authenticated user
-      user = await AuthService.getUserFromToken(token)
+    // User is already authenticated by the middleware
+    const user = (request as any).user
+    
+    if (!user || !user.id) {
+      return createErrorResponse('User not found', 401)
     }
 
-    if (!user) {
-      // Fallback to demo user for unauthenticated requests
-      user = await DatabaseService.getOrCreateDemoUser()
-    }
-
+    // Create the watchlist
     const watchlist = await DatabaseService.createWatchlist(user.id, name || 'My Watchlist')
     
     console.log(`✅ Database: Created watchlist "${name}" for user ${user.id}`)
-    return NextResponse.json({
+    return createAuthenticatedResponse({
       success: true,
       data: watchlist
     })
   } catch (error) {
     console.error('❌ Error creating watchlist:', error)
-    return NextResponse.json(
-      { success: false, message: 'Failed to create watchlist' },
-      { status: 500 }
-    )
+    return createErrorResponse('Failed to create watchlist', 500)
   }
-} 
+}
+
+// Export the handlers wrapped with authentication
+export const GET = withAuth(getWatchlistsHandler)
+export const POST = withAuth(createWatchlistHandler) 

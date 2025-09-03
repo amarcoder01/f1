@@ -25,25 +25,36 @@ export const useTopMovers = () => {
 
   const fetchMarketStatus = useCallback(async () => {
     try {
+      console.log('🔄 Fetching market status...')
       const marketStatus = await TopMoversApiService.getMarketStatus()
+      console.log('✅ Market status fetched:', marketStatus)
       setState(prev => ({ ...prev, marketStatus }))
     } catch (error) {
-      console.error('Failed to fetch market status:', error)
+      console.error('❌ Failed to fetch market status:', error)
       // Don't set error state for market status failure
     }
   }, [])
 
   const fetchInitialData = useCallback(async () => {
+    console.log('🔄 Starting initial data fetch...')
     setState(prev => ({ ...prev, loading: true, error: null }))
     
     try {
+      console.log('📊 Fetching top gainers and losers...')
       const [gainersResponse, losersResponse] = await Promise.all([
         TopMoversApiService.getTopGainers(),
         TopMoversApiService.getTopLosers(),
       ])
 
+      console.log('📈 Gainers response:', gainersResponse)
+      console.log('📉 Losers response:', losersResponse)
+
       const gainersData = gainersResponse.results || []
       const losersData = losersResponse.results || []
+
+      console.log(`📊 Received ${gainersData.length} gainers and ${losersData.length} losers`)
+      console.log('📊 Gainers data sample:', gainersData.slice(0, 2))
+      console.log('📊 Losers data sample:', losersData.slice(0, 2))
 
       setAllGainers(gainersData)
       setAllLosers(losersData)
@@ -64,17 +75,37 @@ export const useTopMovers = () => {
 
       // If both gainers and losers are empty, set an error
       if (gainersData.length === 0 && losersData.length === 0) {
+        console.warn('⚠️ No data received from API')
         setState(prev => ({
           ...prev,
-          error: 'No top movers data available. This could be due to market hours, API limits, or temporary data unavailability. Please try again later.',
+          error: 'No top movers data available. Market may be closed or data temporarily unavailable.',
+        }))
+      } else {
+        console.log('✅ Data fetch completed successfully')
+        // Clear any existing errors
+        setState(prev => ({
+          ...prev,
+          error: null,
         }))
       }
     } catch (error) {
+      console.error('❌ Error in fetchInitialData:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch stock data'
+      
+      // Provide more specific error messages
+      let userFriendlyError = errorMessage
+      if (errorMessage.includes('Failed to fetch')) {
+        userFriendlyError = 'Unable to connect to the market data service. Please check your internet connection and try again.'
+      } else if (errorMessage.includes('API rate limit')) {
+        userFriendlyError = 'API rate limit exceeded. Please wait a moment and try again.'
+      } else if (errorMessage.includes('Invalid API key')) {
+        userFriendlyError = 'API configuration error. Please contact support.'
+      }
+      
       setState(prev => ({
         ...prev,
         loading: false,
-        error: errorMessage,
+        error: userFriendlyError,
       }))
     }
   }, [])
@@ -109,18 +140,22 @@ export const useTopMovers = () => {
   const hasMoreLosers = state.losers.length < allLosers.length
 
   const refreshData = useCallback(() => {
+    console.log('🔄 Manual refresh triggered')
     fetchInitialData()
     fetchMarketStatus()
   }, [fetchInitialData, fetchMarketStatus])
 
   // Setup automatic refresh
   useEffect(() => {
+    console.log('🚀 Setting up useTopMovers hook...')
+    
     // Initial data fetch
     fetchInitialData()
     fetchMarketStatus()
 
     // Setup interval for automatic refresh
     intervalRef.current = setInterval(() => {
+      console.log('🔄 Auto-refresh triggered')
       fetchInitialData()
       fetchMarketStatus()
     }, AUTO_REFRESH_INTERVAL)
@@ -129,6 +164,7 @@ export const useTopMovers = () => {
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
+        console.log('🧹 Cleaned up auto-refresh interval')
       }
     }
   }, [fetchInitialData, fetchMarketStatus])

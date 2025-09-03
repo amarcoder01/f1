@@ -37,12 +37,6 @@ interface PolygonTickerData {
   fmv?: number // fair market value
 }
 
-interface PolygonApiResponse {
-  status: string
-  tickers: PolygonTickerData[]
-  count?: number
-}
-
 interface StockData {
   ticker: string
   name: string
@@ -116,7 +110,14 @@ async function makePolygonRequest(endpoint: string): Promise<any> {
   const url = `https://api.polygon.io${endpoint}${endpoint.includes('?') ? '&' : '?'}apikey=${POLYGON_API_KEY}`
   
   try {
-    const response = await fetch(url)
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      // Add timeout to prevent hanging requests
+      signal: AbortSignal.timeout(15000) // 15 second timeout
+    })
     
     if (!response.ok) {
       if (response.status === 401) {
@@ -124,6 +125,9 @@ async function makePolygonRequest(endpoint: string): Promise<any> {
       }
       if (response.status === 403) {
         throw new Error('Access forbidden. Please check your Polygon.io subscription plan.')
+      }
+      if (response.status === 429) {
+        throw new Error('API rate limit exceeded. Please try again later.')
       }
       throw new Error(`API request failed: ${response.status} ${response.statusText}`)
     }
@@ -143,80 +147,46 @@ async function makePolygonRequest(endpoint: string): Promise<any> {
   }
 }
 
-// Enhanced function to get the most recent trading data for a stock
-async function getMostRecentStockData(stock: string): Promise<PolygonTickerData | null> {
+// EXPERT SOLUTION: Use Polygon.io's Previous Close endpoint for last available data
+async function getStockData(stock: string): Promise<PolygonTickerData | null> {
   try {
-    // Strategy 1: Try to get the most recent daily data (last 5 trading days)
-    const today = new Date()
-    let foundData: any = null
-    let foundDate: string | null = null
-    let prevDate: string | null = null
+    console.log(`🔍 Fetching data for ${stock} using Previous Close endpoint...`)
     
-    // Try the last 5 trading days to find the most recent data
-    for (let i = 0; i < 5; i++) {
-      const checkDate = new Date(today)
-      checkDate.setDate(checkDate.getDate() - i)
-      const dateStr = checkDate.toISOString().split('T')[0]
-      
-      try {
-        const endpoint = `/v2/aggs/ticker/${stock}/range/1/day/${dateStr}/${dateStr}`
-        const data = await makePolygonRequest(endpoint)
-        
-        if (data.results && data.results.length > 0) {
-          foundData = data.results[0]
-          foundDate = dateStr
-          break
-        }
-      } catch (error) {
-        console.log(`No data for ${stock} on ${dateStr}`)
-        continue
-      }
-    }
+    // Use the Previous Close endpoint - this is the EXPERT approach
+    // It automatically returns the most recent available data regardless of market status
+    const endpoint = `/v2/aggs/ticker/${stock}/prev`
+    const data = await makePolygonRequest(endpoint)
     
-    if (!foundData || !foundDate) {
-      console.log(`No recent data found for ${stock} in the last 5 days`)
+    if (!data.results || data.results.length === 0) {
+      console.log(`No data available for ${stock} from Previous Close endpoint`)
       return null
     }
     
-    // Strategy 2: Get the previous trading day data for comparison
-    const prevTradingDay = new Date(foundDate)
-    prevTradingDay.setDate(prevTradingDay.getDate() - 1)
+    const result = data.results[0]
+    console.log(`✅ Got Previous Close data for ${stock}: Close=${result.c}, Open=${result.o}, Volume=${result.v}`)
     
-    // Try to find the previous trading day data
-    for (let i = 1; i <= 5; i++) {
-      const checkDate = new Date(foundDate)
-      checkDate.setDate(checkDate.getDate() - i)
-      const dateStr = checkDate.toISOString().split('T')[0]
-      
-      try {
-        const endpoint = `/v2/aggs/ticker/${stock}/range/1/day/${dateStr}/${dateStr}`
-        const data = await makePolygonRequest(endpoint)
-        
-        if (data.results && data.results.length > 0) {
-          prevDate = dateStr
-          break
-        }
-      } catch (error) {
-        continue
+    // For Previous Close endpoint, we need to get the previous day's data for comparison
+    // Calculate the date for the previous trading day
+    const resultDate = new Date(result.t)
+    const previousDate = new Date(resultDate)
+    previousDate.setDate(previousDate.getDate() - 1)
+    
+    // Get the previous day's data for change calculation
+    const prevDateStr = previousDate.toISOString().split('T')[0]
+    const prevEndpoint = `/v2/aggs/ticker/${stock}/range/1/day/${prevDateStr}/${prevDateStr}`
+    
+    let previousClose = result.o // Use open as fallback
+    try {
+      const prevData = await makePolygonRequest(prevEndpoint)
+      if (prevData.results && prevData.results.length > 0) {
+        previousClose = prevData.results[0].c // Use previous day's close
+        console.log(`✅ Got previous day close for ${stock}: ${previousClose}`)
       }
+    } catch (error) {
+      console.log(`⚠️ Could not fetch previous day data for ${stock}, using open price`)
     }
     
-    // Strategy 3: If no previous day found, use the current day's open as previous close
-    let previousClose = foundData.o // Use open as fallback
-    if (prevDate) {
-      try {
-        const prevEndpoint = `/v2/aggs/ticker/${stock}/range/1/day/${prevDate}/${prevDate}`
-        const prevData = await makePolygonRequest(prevEndpoint)
-        if (prevData.results && prevData.results.length > 0) {
-          previousClose = prevData.results[0].c
-        }
-      } catch (error) {
-        console.log(`Could not fetch previous day data for ${stock}`)
-      }
-    }
-    
-    // Calculate change from previous close
-    const currentPrice = foundData.c
+    const currentPrice = result.c // Current close price
     const change = currentPrice - previousClose
     const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0
     
@@ -224,23 +194,23 @@ async function getMostRecentStockData(stock: string): Promise<PolygonTickerData 
       ticker: stock,
       day: {
         c: currentPrice,
-        h: foundData.h,
-        l: foundData.l,
-        o: foundData.o,
-        v: foundData.v,
-        vw: foundData.vw
+        h: result.h,
+        l: result.l,
+        o: result.o,
+        v: result.v,
+        vw: result.vw
       },
       prevDay: {
         c: previousClose,
-        h: foundData.h,
-        l: foundData.l,
-        o: foundData.o,
-        v: foundData.v,
-        vw: foundData.vw
+        h: result.h,
+        l: result.l,
+        o: result.o,
+        v: result.v,
+        vw: result.vw
       },
       todaysChange: change,
       todaysChangePerc: changePercent,
-      updated: foundData.t
+      updated: result.t
     }
     
     return tickerData
@@ -280,25 +250,28 @@ export async function GET(request: NextRequest) {
       'ABT', 'PEP', 'AVGO', 'COST', 'MRK', 'WMT', 'ACN', 'DHR', 'LLY', 'NEE'
     ]
     
-    console.log(`🔍 Fetching data for ${majorStocks.length} major stocks...`)
+    console.log(`🔍 Fetching data for ${majorStocks.length} major stocks using EXPERT Previous Close method...`)
     
     let allTickers: PolygonTickerData[] = []
     
     // Fetch data for major stocks with enhanced error handling
     for (const stock of majorStocks) {
       try {
-        const tickerData = await getMostRecentStockData(stock)
+        const tickerData = await getStockData(stock)
         if (tickerData) {
           allTickers.push(tickerData)
+          console.log(`✅ Added ${stock} to tickers list`)
         }
         
         // Add small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 50))
+        await new Promise(resolve => setTimeout(resolve, 200))
       } catch (error) {
         console.log(`Failed to fetch data for ${stock}:`, error)
         continue
       }
     }
+    
+    console.log(`📊 Total tickers collected: ${allTickers.length}`)
     
     if (allTickers.length === 0) {
       console.warn('No ticker data available from Polygon API')
@@ -316,6 +289,8 @@ export async function GET(request: NextRequest) {
     const transformedResults = allTickers
       .map(ticker => transformPolygonData(ticker))
       .filter((stock): stock is StockData => stock !== null)
+    
+    console.log(`🔄 Transformed ${allTickers.length} tickers into ${transformedResults.length} valid stocks`)
     
     if (transformedResults.length === 0) {
       console.warn('No valid stock data after transformation')

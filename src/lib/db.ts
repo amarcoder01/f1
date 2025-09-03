@@ -5,77 +5,361 @@ declare global {
   var __prisma: PrismaClient | undefined
 }
 
-// Create a singleton Prisma client instance
-export const prisma = globalThis.__prisma || new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-})
+// Connection status tracking
+let isConnected = false
+let connectionPromise: Promise<boolean> | null = null
+let lastConnectionAttempt = 0
+const CONNECTION_RETRY_DELAY = 5000 // 5 seconds
 
-// In development, store the client on the global object to prevent multiple instances
-if (process.env.NODE_ENV === 'development') {
-  globalThis.__prisma = prisma
+// Enhanced Prisma client configuration with production-ready features
+const createPrismaClient = () => {
+  const client = new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL
+      }
+    }
+  })
+
+  // Enhanced error handling
+  client.$on('error', (e) => {
+    console.error('❌ Prisma client error:', e)
+    isConnected = false
+  })
+
+  return client
 }
+
+// Singleton Prisma client with connection management
+let prisma: PrismaClient
+
+if (process.env.NODE_ENV === 'development') {
+  // In development, use global instance to prevent multiple connections
+  if (!globalThis.__prisma) {
+    globalThis.__prisma = createPrismaClient()
+  }
+  prisma = globalThis.__prisma
+} else {
+  // In production, create new instance
+  prisma = createPrismaClient()
+}
+
+// Enhanced database connection test with retry logic and health checks
+export const testDatabaseConnection = async (maxRetries = 3): Promise<boolean> => {
+  // If we have a recent connection attempt, wait
+  const now = Date.now()
+  if (connectionPromise && (now - lastConnectionAttempt) < CONNECTION_RETRY_DELAY) {
+    try {
+      await connectionPromise
+      return isConnected
+    } catch {
+      // Connection failed, continue with retry logic
+    }
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔍 Testing database connection (attempt ${attempt}/${maxRetries})...`)
+      
+      // Test connection with a simple query
+      await prisma.$queryRaw`SELECT 1`
+      
+      isConnected = true
+      console.log('✅ Database connection successful')
+      return true
+    } catch (error) {
+      console.error(`❌ Database connection attempt ${attempt} failed:`, error)
+      isConnected = false
+      
+      if (attempt === maxRetries) {
+        console.error('❌ All database connection attempts failed')
+        return false
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const delay = Math.pow(2, attempt) * 1000
+      console.log(`⏳ Waiting ${delay}ms before retry...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  
+  return false
+}
+
+// Initialize database connection on startup
+export const initializeDatabase = async (): Promise<void> => {
+  try {
+    console.log('🚀 Initializing database connection...')
+    
+    // Check if DATABASE_URL is configured
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is not configured')
+    }
+    
+    // Test connection
+    const isConnected = await testDatabaseConnection()
+    
+    if (!isConnected) {
+      throw new Error('Failed to establish database connection after multiple attempts')
+    }
+    
+    console.log('✅ Database initialized successfully')
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error)
+    throw error
+  }
+}
+
+// Get database connection status
+export const getDatabaseStatus = (): { isConnected: boolean; lastAttempt: number } => {
+  return {
+    isConnected,
+    lastAttempt: lastConnectionAttempt
+  }
+}
+
+// Ensure database is ready before operations
+export const ensureDatabaseReady = async (): Promise<void> => {
+  if (isConnected) {
+    return
+  }
+
+  // If there's no active connection attempt, start one
+  if (!connectionPromise) {
+    connectionPromise = testDatabaseConnection()
+    lastConnectionAttempt = Date.now()
+  }
+
+  try {
+    await connectionPromise
+  } finally {
+    connectionPromise = null
+  }
+}
+
+// Graceful shutdown (only for production)
+export const disconnectDatabase = async (): Promise<void> => {
+  try {
+    console.log('🔄 Disconnecting from database...')
+    await prisma.$disconnect()
+    isConnected = false
+    console.log('✅ Database disconnected successfully')
+  } catch (error) {
+    console.error('❌ Error disconnecting from database:', error)
+  }
+}
+
+// Export the configured Prisma client
+export { prisma }
 
 // Database service for all user data operations
 export class DatabaseService {
+  // Test database connection
+  static async testConnection(): Promise<boolean> {
+    try {
+      await ensureDatabaseReady()
+      await prisma.$queryRaw`SELECT 1`
+      return true
+    } catch (error) {
+      console.error('❌ Database connection test failed:', error)
+      return false
+    }
+  }
+
+  // Get or create demo user for testing
+  static async getOrCreateDemoUser() {
+    try {
+      await ensureDatabaseReady()
+      
+      // Check if demo user exists
+      let user = await prisma.user.findUnique({
+        where: { email: 'demo@vidality.com' }
+      })
+
+      if (!user) {
+        // Create demo user if doesn't exist
+        user = await prisma.user.create({
+          data: {
+            email: 'demo@vidality.com',
+            password: '$2a$10$demo.hash.for.testing.purposes.only',
+            firstName: 'Demo',
+            lastName: 'User',
+            isEmailVerified: true,
+            preferences: JSON.stringify({
+              theme: 'system',
+              currency: 'USD',
+              timezone: 'UTC',
+              notifications: {
+                email: true,
+                push: true,
+                sms: false
+              }
+            })
+          }
+        })
+        console.log('✅ Demo user created successfully')
+      }
+
+      return user
+    } catch (error) {
+      console.error('❌ Error getting/creating demo user:', error)
+      throw error
+    }
+  }
+
   // ===== WATCHLIST OPERATIONS =====
   
   // Create a new watchlist for a user
   static async createWatchlist(userId: string, name: string = 'My Watchlist') {
     try {
+      await ensureDatabaseReady()
+      
+      // Check if watchlist with same name already exists for this user
+      const existingWatchlist = await prisma.watchlist.findFirst({
+        where: { 
+          userId,
+          name 
+        }
+      })
+      
+      if (existingWatchlist) {
+        throw new Error(`Watchlist "${name}" already exists`)
+      }
+      
       const watchlist = await prisma.watchlist.create({
         data: {
           userId,
           name,
         },
         include: {
-          items: true,
-        },
+          items: true
+        }
       })
+      
+      console.log('✅ Watchlist created successfully:', watchlist.name)
       return watchlist
     } catch (error) {
-      console.error('Error creating watchlist:', error)
+      console.error('❌ Error creating watchlist:', error)
       throw error
     }
   }
 
   // Get all watchlists for a user
-  static async getUserWatchlists(userId: string) {
+  static async getWatchlists(userId: string) {
     try {
+      await ensureDatabaseReady()
+      
       const watchlists = await prisma.watchlist.findMany({
         where: { userId },
         include: {
           items: {
-            orderBy: { lastUpdated: 'desc' },
-          },
+            orderBy: { addedAt: 'desc' }
+          }
         },
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { createdAt: 'desc' }
       })
+      
       return watchlists
     } catch (error) {
-      console.error('Error fetching user watchlists:', error)
+      console.error('❌ Error getting watchlists:', error)
       throw error
     }
   }
 
-  // Get a specific watchlist with items
+  // Get a specific watchlist by ID
+  static async getWatchlistById(watchlistId: string, userId: string) {
+    try {
+      await ensureDatabaseReady()
+      
+      const watchlist = await prisma.watchlist.findFirst({
+        where: { 
+          id: watchlistId,
+          userId 
+        },
+        include: {
+          items: {
+            orderBy: { addedAt: 'desc' }
+          }
+        }
+      })
+      
+      return watchlist
+    } catch (error) {
+      console.error('❌ Error getting watchlist by ID:', error)
+      throw error
+    }
+  }
+
+  // Get a specific watchlist by ID (alias for backward compatibility)
   static async getWatchlist(watchlistId: string) {
     try {
+      await ensureDatabaseReady()
+      
       const watchlist = await prisma.watchlist.findUnique({
         where: { id: watchlistId },
         include: {
           items: {
-            orderBy: { lastUpdated: 'desc' },
-          },
-        },
+            orderBy: { addedAt: 'desc' }
+          }
+        }
       })
+      
       return watchlist
     } catch (error) {
-      console.error('Error fetching watchlist:', error)
+      console.error('❌ Error getting watchlist:', error)
       throw error
     }
   }
 
   // Add a stock to a watchlist
+  static async addStockToWatchlist(watchlistId: string, symbol: string, userId: string) {
+    try {
+      await ensureDatabaseReady()
+      
+      // Verify watchlist ownership
+      const watchlist = await prisma.watchlist.findFirst({
+        where: { 
+          id: watchlistId,
+          userId 
+        }
+      })
+      
+      if (!watchlist) {
+        throw new Error('Watchlist not found or access denied')
+      }
+      
+      // Check if stock already exists in watchlist
+      const existingItem = await prisma.watchlistItem.findFirst({
+        where: { 
+          watchlistId,
+          symbol: symbol.toUpperCase()
+        }
+      })
+      
+      if (existingItem) {
+        throw new Error(`Stock ${symbol} is already in this watchlist`)
+      }
+      
+      const item = await prisma.watchlistItem.create({
+        data: {
+          watchlistId,
+          symbol: symbol.toUpperCase(),
+          name: symbol.toUpperCase(), // Required field
+          type: 'stock', // Required field
+          addedAt: new Date()
+        }
+      })
+      
+      console.log('✅ Stock added to watchlist:', symbol)
+      return item
+    } catch (error) {
+      console.error('❌ Error adding stock to watchlist:', error)
+      throw error
+    }
+  }
+
+  // Add a stock to a watchlist with full stock data (alias for backward compatibility)
   static async addToWatchlist(watchlistId: string, stockData: {
     symbol: string
     name: string
@@ -90,12 +374,14 @@ export class DatabaseService {
     marketCap?: number
   }) {
     try {
+      await ensureDatabaseReady()
+      
       // Check if item already exists
       const existingItem = await prisma.watchlistItem.findFirst({
         where: {
           watchlistId,
           symbol: stockData.symbol,
-        },
+        }
       })
 
       if (existingItem) {
@@ -113,7 +399,7 @@ export class DatabaseService {
             volume: stockData.volume,
             marketCap: stockData.marketCap,
             lastUpdated: new Date(),
-          },
+          }
         })
         return updatedItem
       } else {
@@ -133,17 +419,53 @@ export class DatabaseService {
             volume: stockData.volume,
             marketCap: stockData.marketCap,
             lastUpdated: new Date(),
-          },
+          }
         })
         return newItem
       }
     } catch (error) {
-      console.error('Error adding to watchlist:', error)
+      console.error('❌ Error adding to watchlist:', error)
       throw error
     }
   }
 
   // Remove a stock from a watchlist
+  static async removeStockFromWatchlist(watchlistId: string, symbol: string, userId: string) {
+    try {
+      await ensureDatabaseReady()
+      
+      // Verify watchlist ownership
+      const watchlist = await prisma.watchlist.findFirst({
+        where: { 
+          id: watchlistId,
+          userId 
+        }
+      })
+      
+      if (!watchlist) {
+        throw new Error('Watchlist not found or access denied')
+      }
+      
+      const deletedItem = await prisma.watchlistItem.deleteMany({
+        where: { 
+          watchlistId,
+          symbol: symbol.toUpperCase()
+        }
+      })
+      
+      if (deletedItem.count === 0) {
+        throw new Error(`Stock ${symbol} not found in watchlist`)
+      }
+      
+      console.log('✅ Stock removed from watchlist:', symbol)
+      return { success: true, deletedCount: deletedItem.count }
+    } catch (error) {
+      console.error('❌ Error removing stock from watchlist:', error)
+      throw error
+    }
+  }
+
+  // Remove a stock from a watchlist (alias for backward compatibility)
   static async removeFromWatchlist(watchlistId: string, symbol: string) {
     try {
       console.log(`🗑️ Database: Removing ${symbol} from watchlist ${watchlistId}...`)
@@ -162,7 +484,7 @@ export class DatabaseService {
         where: {
           watchlistId,
           symbol: symbol.toUpperCase(), // Normalize symbol case
-        },
+        }
       })
       
       if (!item) {
@@ -173,7 +495,7 @@ export class DatabaseService {
       const deletedItem = await prisma.watchlistItem.delete({
         where: {
           id: item.id
-        },
+        }
       })
       
       console.log(`✅ Database: Successfully removed ${symbol} from watchlist ${watchlistId}`)
@@ -184,48 +506,103 @@ export class DatabaseService {
     }
   }
 
-  // Update stock data in watchlist
-  static async updateWatchlistItem(itemId: string, stockData: {
-    price?: number
-    change?: number
-    changePercent?: number
-    exchange?: string
-    sector?: string
-    industry?: string
-    volume?: number
-    marketCap?: number
-  }) {
+  // Delete a watchlist
+  static async deleteWatchlist(watchlistId: string, userId: string) {
     try {
-      const updatedItem = await prisma.watchlistItem.update({
-        where: { id: itemId },
-        data: {
-          ...(stockData.price !== undefined && { price: stockData.price }),
-          ...(stockData.change !== undefined && { change: stockData.change }),
-          ...(stockData.changePercent !== undefined && { changePercent: stockData.changePercent }),
-          ...(stockData.exchange && { exchange: stockData.exchange }),
-          ...(stockData.sector && { sector: stockData.sector }),
-          ...(stockData.industry && { industry: stockData.industry }),
-          ...(stockData.volume !== undefined && { volume: stockData.volume }),
-          ...(stockData.marketCap !== undefined && { marketCap: stockData.marketCap }),
-          lastUpdated: new Date(),
-        },
+      await ensureDatabaseReady()
+      
+      // Verify watchlist ownership
+      const watchlist = await prisma.watchlist.findFirst({
+        where: { 
+          id: watchlistId,
+          userId 
+        }
       })
-      return updatedItem
+      
+      if (!watchlist) {
+        throw new Error('Watchlist not found or access denied')
+      }
+      
+      // Delete watchlist items first (cascade delete)
+      await prisma.watchlistItem.deleteMany({
+        where: { watchlistId }
+      })
+      
+      // Delete the watchlist
+      await prisma.watchlist.delete({
+        where: { id: watchlistId }
+      })
+      
+      console.log('✅ Watchlist deleted successfully:', watchlist.name)
+      return { success: true }
     } catch (error) {
-      console.error('Error updating watchlist item:', error)
+      console.error('❌ Error deleting watchlist:', error)
       throw error
     }
   }
 
-  // Delete a watchlist
-  static async deleteWatchlist(watchlistId: string) {
+  // Delete a watchlist (alias for backward compatibility - no userId check)
+  static async deleteWatchlistById(watchlistId: string) {
     try {
-      const deletedWatchlist = await prisma.watchlist.delete({
-        where: { id: watchlistId },
+      await ensureDatabaseReady()
+      
+      // Delete watchlist items first (cascade delete)
+      await prisma.watchlistItem.deleteMany({
+        where: { watchlistId }
       })
-      return deletedWatchlist
+      
+      // Delete the watchlist
+      await prisma.watchlist.delete({
+        where: { id: watchlistId }
+      })
+      
+      console.log('✅ Watchlist deleted successfully:', watchlistId)
+      return { success: true }
     } catch (error) {
-      console.error('Error deleting watchlist:', error)
+      console.error('❌ Error deleting watchlist:', error)
+      throw error
+    }
+  }
+
+  // Update watchlist name
+  static async updateWatchlistName(watchlistId: string, newName: string, userId: string) {
+    try {
+      await ensureDatabaseReady()
+      
+      // Verify watchlist ownership
+      const watchlist = await prisma.watchlist.findFirst({
+        where: { 
+          id: watchlistId,
+          userId 
+        }
+      })
+      
+      if (!watchlist) {
+        throw new Error('Watchlist not found or access denied')
+      }
+      
+      // Check if new name already exists for this user
+      const existingWatchlist = await prisma.watchlist.findFirst({
+        where: { 
+          userId,
+          name: newName,
+          id: { not: watchlistId }
+        }
+      })
+      
+      if (existingWatchlist) {
+        throw new Error(`Watchlist "${newName}" already exists`)
+      }
+      
+      const updatedWatchlist = await prisma.watchlist.update({
+        where: { id: watchlistId },
+        data: { name: newName }
+      })
+      
+      console.log('✅ Watchlist name updated:', newName)
+      return updatedWatchlist
+    } catch (error) {
+      console.error('❌ Error updating watchlist name:', error)
       throw error
     }
   }
@@ -235,6 +612,8 @@ export class DatabaseService {
   // Get user preferences
   static async getUserPreferences(userId: string) {
     try {
+      await ensureDatabaseReady()
+      
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { preferences: true }
@@ -246,7 +625,7 @@ export class DatabaseService {
       
       return JSON.parse(user.preferences)
     } catch (error) {
-      console.error('Error fetching user preferences:', error)
+      console.error('❌ Error fetching user preferences:', error)
       return this.getDefaultPreferences()
     }
   }
@@ -254,6 +633,8 @@ export class DatabaseService {
   // Update user preferences
   static async updateUserPreferences(userId: string, preferences: any) {
     try {
+      await ensureDatabaseReady()
+      
       const currentPreferences = await this.getUserPreferences(userId)
       const updatedPreferences = { ...currentPreferences, ...preferences }
       
@@ -264,7 +645,7 @@ export class DatabaseService {
       
       return updatedPreferences
     } catch (error) {
-      console.error('Error updating user preferences:', error)
+      console.error('❌ Error updating user preferences:', error)
       throw error
     }
   }
@@ -308,6 +689,8 @@ export class DatabaseService {
     timestamp: Date
   }) {
     try {
+      await ensureDatabaseReady()
+      
       const preferences = await this.getUserPreferences(userId)
       const recentSearches = preferences.recentSearches || []
       
@@ -329,7 +712,7 @@ export class DatabaseService {
       await this.updateUserPreferences(userId, { recentSearches: updatedSearches })
       return updatedSearches
     } catch (error) {
-      console.error('Error storing recent search:', error)
+      console.error('❌ Error storing recent search:', error)
       throw error
     }
   }
@@ -340,7 +723,7 @@ export class DatabaseService {
       const preferences = await this.getUserPreferences(userId)
       return preferences.recentSearches || []
     } catch (error) {
-      console.error('Error fetching recent searches:', error)
+      console.error('❌ Error fetching recent searches:', error)
       return []
     }
   }
@@ -351,7 +734,7 @@ export class DatabaseService {
       await this.updateUserPreferences(userId, { favoriteStocks: favorites })
       return favorites
     } catch (error) {
-      console.error('Error storing favorite stocks:', error)
+      console.error('❌ Error storing favorite stocks:', error)
       throw error
     }
   }
@@ -362,7 +745,7 @@ export class DatabaseService {
       const preferences = await this.getUserPreferences(userId)
       return preferences.favoriteStocks || []
     } catch (error) {
-      console.error('Error fetching favorite stocks:', error)
+      console.error('❌ Error fetching favorite stocks:', error)
       return []
     }
   }
@@ -382,7 +765,7 @@ export class DatabaseService {
       })
       return portfolioData
     } catch (error) {
-      console.error('Error storing portfolio data:', error)
+      console.error('❌ Error storing portfolio data:', error)
       throw error
     }
   }
@@ -393,7 +776,7 @@ export class DatabaseService {
       const preferences = await this.getUserPreferences(userId)
       return preferences.portfolioData || { positions: [], transactions: [], trades: [] }
     } catch (error) {
-      console.error('Error fetching portfolio data:', error)
+      console.error('❌ Error fetching portfolio data:', error)
       return { positions: [], transactions: [], trades: [] }
     }
   }
@@ -404,7 +787,7 @@ export class DatabaseService {
       await this.updateUserPreferences(userId, { tradingStrategies: strategies })
       return strategies
     } catch (error) {
-      console.error('Error storing trading strategies:', error)
+      console.error('❌ Error storing trading strategies:', error)
       throw error
     }
   }
@@ -415,7 +798,7 @@ export class DatabaseService {
       const preferences = await this.getUserPreferences(userId)
       return preferences.tradingStrategies || []
     } catch (error) {
-      console.error('Error fetching trading strategies:', error)
+      console.error('❌ Error fetching trading strategies:', error)
       return []
     }
   }
@@ -426,7 +809,7 @@ export class DatabaseService {
       await this.updateUserPreferences(userId, { stockComparisonSessions: sessions })
       return sessions
     } catch (error) {
-      console.error('Error storing stock comparison sessions:', error)
+      console.error('❌ Error storing stock comparison sessions:', error)
       throw error
     }
   }
@@ -437,7 +820,7 @@ export class DatabaseService {
       const preferences = await this.getUserPreferences(userId)
       return preferences.stockComparisonSessions || []
     } catch (error) {
-      console.error('Error fetching stock comparison sessions:', error)
+      console.error('❌ Error fetching stock comparison sessions:', error)
       return []
     }
   }
@@ -448,7 +831,7 @@ export class DatabaseService {
       await this.updateUserPreferences(userId, { marketSearchHistory: history })
       return history
     } catch (error) {
-      console.error('Error storing market search history:', error)
+      console.error('❌ Error storing market search history:', error)
       throw error
     }
   }
@@ -459,54 +842,18 @@ export class DatabaseService {
       const preferences = await this.getUserPreferences(userId)
       return preferences.marketSearchHistory || []
     } catch (error) {
-      console.error('Error fetching market search history:', error)
+      console.error('❌ Error fetching market search history:', error)
       return []
     }
   }
 
   // ===== UTILITY METHODS =====
 
-  // Create or get a default user (for demo purposes)
-  static async getOrCreateDemoUser() {
-    try {
-      let user = await prisma.user.findFirst({
-        where: { email: 'demo@vidality.com' },
-      })
-
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            email: 'demo@vidality.com',
-            firstName: 'Demo',
-            lastName: 'User',
-            password: 'demo-password-hash',
-            preferences: JSON.stringify(this.getDefaultPreferences()),
-          },
-        })
-      }
-
-      return user
-    } catch (error) {
-      console.error('Error getting or creating demo user:', error)
-      throw error
-    }
-  }
-
-  // Test database connection
-  static async testConnection() {
-    try {
-      await prisma.$connect()
-      console.log('✅ Database connection successful')
-      return true
-    } catch (error) {
-      console.error('❌ Database connection failed:', error)
-      return false
-    }
-  }
-
   // Migrate localStorage data to database for a user
   static async migrateLocalStorageData(userId: string, localStorageData: any) {
     try {
+      await ensureDatabaseReady()
+      
       const updates: any = {}
       
       // Migrate recent searches
@@ -546,7 +893,7 @@ export class DatabaseService {
       
       return updates
     } catch (error) {
-      console.error('Error migrating localStorage data:', error)
+      console.error('❌ Error migrating localStorage data:', error)
       throw error
     }
   }

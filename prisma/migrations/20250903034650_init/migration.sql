@@ -93,6 +93,21 @@ CREATE TABLE "public"."Position" (
 );
 
 -- CreateTable
+CREATE TABLE "public"."Trade" (
+    "id" TEXT NOT NULL,
+    "portfolioId" TEXT NOT NULL,
+    "symbol" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "quantity" DOUBLE PRECISION NOT NULL,
+    "price" DOUBLE PRECISION NOT NULL,
+    "amount" DOUBLE PRECISION NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "notes" TEXT,
+
+    CONSTRAINT "Trade_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."Watchlist" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -139,9 +154,10 @@ CREATE TABLE "public"."ChatSession" (
 CREATE TABLE "public"."ChatMessage" (
     "id" TEXT NOT NULL,
     "sessionId" TEXT NOT NULL,
+    "role" TEXT NOT NULL,
     "content" TEXT NOT NULL,
+    "metadata" TEXT,
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "sender" TEXT NOT NULL,
 
     CONSTRAINT "ChatMessage_pkey" PRIMARY KEY ("id")
 );
@@ -309,6 +325,9 @@ ALTER TABLE "public"."Portfolio" ADD CONSTRAINT "Portfolio_userId_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "public"."Position" ADD CONSTRAINT "Position_portfolioId_fkey" FOREIGN KEY ("portfolioId") REFERENCES "public"."Portfolio"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."Trade" ADD CONSTRAINT "Trade_portfolioId_fkey" FOREIGN KEY ("portfolioId") REFERENCES "public"."Portfolio"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Watchlist" ADD CONSTRAINT "Watchlist_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

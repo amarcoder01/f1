@@ -109,6 +109,10 @@ export const useSettingsStore = create<SettingsStore>()(
 )
 
 // Watchlist Store
+// IMPORTANT: This store is database-first and does NOT persist watchlist data
+// - All watchlist data is fetched fresh from the database on each load
+// - localStorage is only used for authentication tokens
+// - The store acts as a cache for UI state, not data persistence
 interface WatchlistStore {
   watchlists: Watchlist[]
   activeWatchlist: string | null
@@ -124,10 +128,14 @@ interface WatchlistStore {
   updateWatchlistItemPrice: (watchlistId: string, itemId: string, price: number, change: number, changePercent: number) => void
   setActiveWatchlist: (id: string | null) => void
   loadWatchlists: () => Promise<void>
+  refreshWatchlistData: () => Promise<void>
+  clearWatchlist: (watchlistId: string) => Promise<void>
+  removeDuplicates: (watchlistId: string) => Promise<void>
   startRealTimeUpdates: () => void
   stopRealTimeUpdates: () => void
   updatePriceFromWebSocket: (symbol: string, price: number, change: number, changePercent: number) => void
   setHydrated: (hydrated: boolean) => void
+  clearWatchlists: () => void
 }
 
 export const useWatchlistStore = create<WatchlistStore>()(
@@ -142,16 +150,92 @@ export const useWatchlistStore = create<WatchlistStore>()(
       loadWatchlists: async () => {
         set({ isLoading: true })
         try {
-          const response = await fetch('/api/watchlist')
+          // Check if we have a valid token in localStorage
+          const token = localStorage.getItem('token')
+          console.log('🔐 Watchlist Store: loadWatchlists called, localStorage token:', !!token)
+          
+          if (!token) {
+            console.log('🔐 Watchlist Store: No token found, skipping watchlist load')
+            set({ watchlists: [], isLoading: false })
+            return
+          }
+
+          console.log('📡 Watchlist Store: Fetching fresh data from database...')
+          
+          const response = await fetch('/api/watchlist', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
           console.log('📡 Watchlist API response status:', response.status)
+          
+          if (response.status === 401) {
+            console.log('🔐 Watchlist Store: Unauthorized (token expired), attempting token refresh...')
+            
+            try {
+              // Try to refresh the token first
+              const refreshResponse = await fetch('/api/auth/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+                // Refresh token is sent via HTTP-only cookie
+              })
+              
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json()
+                console.log('🔐 Watchlist Store: Token refreshed successfully, retrying request...')
+                
+                // Update localStorage with new token
+                localStorage.setItem('token', refreshData.accessToken)
+                
+                // Retry the original request with new token
+                const retryResponse = await fetch('/api/watchlist', {
+                  headers: {
+                    'Authorization': `Bearer ${refreshData.accessToken}`,
+                    'Content-Type': 'application/json'
+                  }
+                })
+                
+                if (retryResponse.ok) {
+                  const retryData = await retryResponse.json()
+                  console.log('✅ Watchlist Store: Request succeeded after token refresh')
+                  
+                  if (retryData.success && retryData.data) {
+                    set({ watchlists: retryData.data, isLoading: false })
+                    console.log('✅ Watchlist Store: Fresh data loaded from database:', retryData.data)
+                    return
+                  }
+                }
+              }
+            } catch (refreshError) {
+              console.log('🔐 Watchlist Store: Token refresh failed:', refreshError)
+            }
+            
+            // If refresh failed or retry failed, clear auth state and redirect
+            console.log('🔐 Watchlist Store: Authentication failed, clearing state and redirecting...')
+            localStorage.removeItem('token')
+            document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+            document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+            
+            set({ watchlists: [], isLoading: false })
+            
+            // Redirect to login page
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login?message=session_expired'
+            }
+            return
+          }
           
           if (response.ok) {
             const responseData = await response.json()
             console.log('📊 Watchlist API response data:', responseData)
             
             if (responseData.success && responseData.data) {
-              set({ watchlists: responseData.data, isLoading: false })
-              console.log('✅ Successfully loaded watchlists:', responseData.data)
+              let watchlists = responseData.data
+              
+              // Always use fresh data from database - no localStorage for watchlist data
+              set({ watchlists, isLoading: false })
+              console.log('✅ Watchlist Store: Fresh data loaded from database:', watchlists)
             } else {
               console.error('❌ Invalid response format:', responseData)
               set({ isLoading: false })
@@ -170,29 +254,243 @@ export const useWatchlistStore = create<WatchlistStore>()(
           set({ isLoading: false })
         }
       },
+
+      // Refresh watchlist data from database to ensure synchronization
+      refreshWatchlistData: async () => {
+        set({ isLoading: true })
+        try {
+          console.log('🔄 Watchlist Store: Refreshing data from database...')
+          
+          // Clear local data first to ensure fresh fetch
+          set({ watchlists: [] })
+          
+          // Always fetch fresh data from database
+          await get().loadWatchlists()
+          
+          console.log('✅ Watchlist Store: Data refreshed from database successfully')
+        } catch (error) {
+          console.error('❌ Error refreshing watchlist data:', error)
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
+      // Clear all items from a watchlist
+      clearWatchlist: async (watchlistId: string) => {
+        set({ isLoading: true })
+        try {
+          console.log(`🗑️ Clearing all items from watchlist ${watchlistId}...`)
+          
+          // Get current watchlist items
+          const watchlist = get().watchlists.find(w => w.id === watchlistId)
+          if (!watchlist) {
+            throw new Error('Watchlist not found')
+          }
+          
+          // Remove all items one by one
+          const removePromises = watchlist.items.map(async (item) => {
+            try {
+              const response = await fetch(`/api/watchlist/${watchlistId}/items?symbol=${encodeURIComponent(item.symbol)}`, {
+                method: 'DELETE'
+              })
+              if (!response.ok) {
+                console.warn(`⚠️ Failed to remove item ${item.symbol}`)
+              }
+            } catch (error) {
+              console.error(`❌ Error removing item ${item.symbol}:`, error)
+            }
+          })
+          
+          await Promise.all(removePromises)
+          
+          // Update local state
+          set((state) => ({
+            watchlists: state.watchlists.map(w =>
+              w.id === watchlistId
+                ? { ...w, items: [], updatedAt: new Date() }
+                : w
+            ),
+            isLoading: false
+          }))
+          
+          console.log('✅ Watchlist cleared successfully')
+        } catch (error) {
+          console.error('❌ Error clearing watchlist:', error)
+          set({ isLoading: false })
+          throw error
+        }
+      },
+
+      // Remove duplicate stocks from watchlist
+      removeDuplicates: async (watchlistId: string) => {
+        set({ isLoading: true })
+        try {
+          console.log(`🔍 Checking for duplicates in watchlist ${watchlistId}...`)
+          
+          const watchlist = get().watchlists.find(w => w.id === watchlistId)
+          if (!watchlist) {
+            throw new Error('Watchlist not found')
+          }
+          
+          // Find duplicates by symbol
+          const symbolCounts = new Map<string, WatchlistItem[]>()
+          watchlist.items.forEach(item => {
+            const symbol = item.symbol.toUpperCase()
+            if (!symbolCounts.has(symbol)) {
+              symbolCounts.set(symbol, [])
+            }
+            symbolCounts.get(symbol)!.push(item)
+          })
+          
+          const duplicates = Array.from(symbolCounts.entries())
+            .filter(([symbol, items]) => items.length > 1)
+            .flatMap(([symbol, items]) => items.slice(1)) // Keep first, remove rest
+          
+          if (duplicates.length === 0) {
+            console.log('✅ No duplicates found')
+            set({ isLoading: false })
+            return
+          }
+          
+          console.log(`🗑️ Found ${duplicates.length} duplicate items to remove:`, duplicates.map(d => d.symbol))
+          
+          // Remove duplicates
+          const removePromises = duplicates.map(async (item) => {
+            try {
+              const response = await fetch(`/api/watchlist/${watchlistId}/items?symbol=${encodeURIComponent(item.symbol)}`, {
+                method: 'DELETE'
+              })
+              if (!response.ok) {
+                console.warn(`⚠️ Failed to remove duplicate item ${item.symbol}`)
+              }
+            } catch (error) {
+              console.error(`❌ Error removing duplicate item ${item.symbol}:`, error)
+            }
+          })
+          
+          await Promise.all(removePromises)
+          
+          // Update local state instead of refreshing from database to prevent loops
+          set((state) => ({
+            watchlists: state.watchlists.map(w =>
+              w.id === watchlistId
+                ? { ...w, updatedAt: new Date() }
+                : w
+            ),
+            isLoading: false
+          }))
+          
+          console.log('✅ Duplicates removed successfully')
+        } catch (error) {
+          console.error('❌ Error removing duplicates:', error)
+          set({ isLoading: false })
+          throw error
+        }
+      },
       
       createWatchlist: async (name: string) => {
         set({ isLoading: true })
         try {
+          // Check if we have a valid token in localStorage
+          const token = localStorage.getItem('token')
+          if (!token) {
+            console.log('🔐 Watchlist Store: No token found, cannot create watchlist')
+            set({ isLoading: false })
+            throw new Error('Authentication required to create watchlist')
+          }
+
+          console.log(`📝 Store: Creating watchlist "${name}"...`)
+          
           const response = await fetch('/api/watchlist', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json' 
+            },
             body: JSON.stringify({ name })
           })
           
+          console.log(`📡 Create watchlist API response status:`, response.status)
+          
           if (response.ok) {
             const { data } = await response.json()
+            console.log(`✅ Successfully created watchlist:`, data)
+            
             set((state) => ({
               watchlists: [...state.watchlists, data],
               isLoading: false
             }))
-          } else {
-            console.error('Failed to create watchlist')
+            
+            // Refresh watchlists to ensure we have the latest data
+            await get().loadWatchlists()
+          } else if (response.status === 401) {
+            console.log('🔐 Watchlist Store: Unauthorized (token expired), attempting token refresh...')
+            
+            try {
+              // Try to refresh the token first
+              const refreshResponse = await fetch('/api/auth/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+                // Refresh token is sent via HTTP-only cookie
+              })
+              
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json()
+                console.log('🔐 Watchlist Store: Token refreshed successfully, retrying request...')
+                
+                // Update localStorage with new token
+                localStorage.setItem('token', refreshData.accessToken)
+                
+                // Retry the original request with new token
+                const retryResponse = await fetch('/api/watchlist', {
+                  method: 'POST',
+                  headers: { 
+                    'Authorization': `Bearer ${refreshData.accessToken}`,
+                    'Content-Type': 'application/json' 
+                  },
+                  body: JSON.stringify({ name })
+                })
+                
+                if (retryResponse.ok) {
+                  const retryData = await retryResponse.json()
+                  console.log('✅ Watchlist Store: Create watchlist succeeded after token refresh')
+                  
+                  set((state) => ({
+                    watchlists: [...state.watchlists, retryData.data],
+                    isLoading: false
+                  }))
+                  
+                  // Refresh watchlists to ensure we have the latest data
+                  await get().loadWatchlists()
+                  return
+                }
+              }
+            } catch (refreshError) {
+              console.log('🔐 Watchlist Store: Token refresh failed:', refreshError)
+            }
+            
+            // If refresh failed or retry failed, clear auth state and throw error
+            console.log('🔐 Watchlist Store: Authentication failed, clearing state...')
+            localStorage.removeItem('token')
+            document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+            document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+            
             set({ isLoading: false })
+            throw new Error('Your session has expired. Please log in again.')
+          } else {
+            const errorData = await response.json().catch(() => ({}))
+            console.error('❌ Failed to create watchlist:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorData
+            })
+            set({ isLoading: false })
+            throw new Error(errorData.message || 'Failed to create watchlist')
           }
         } catch (error) {
-          console.error('Error creating watchlist:', error)
+          console.error('❌ Error creating watchlist:', error)
           set({ isLoading: false })
+          throw error
         }
       },
       
@@ -230,6 +528,11 @@ export const useWatchlistStore = create<WatchlistStore>()(
         try {
           console.log(`🔍 Store: Adding ${item.symbol} to watchlist ${watchlistId}...`)
           console.log(`📊 Item data:`, item)
+          
+          // Validate watchlistId
+          if (!watchlistId || watchlistId === 'default') {
+            throw new Error('Invalid watchlist ID. Please refresh the page and try again.')
+          }
           
           const response = await fetch(`/api/watchlist/${watchlistId}/items`, {
             method: 'POST',
@@ -393,36 +696,40 @@ export const useWatchlistStore = create<WatchlistStore>()(
       
       startRealTimeUpdates: () => {
         try {
-          const { multiSourceAPI } = require('@/lib/multi-source-api')
-          
-          // Set up periodic updates using multi-source system
-          const allSymbols = get().watchlists.flatMap(w => w.items.map(item => item.symbol))
-          
-          if (allSymbols.length > 0) {
-            // Start periodic updates every 30 seconds
-            const updateInterval = setInterval(async () => {
-              try {
-                for (const symbol of allSymbols) {
-                  const freshData = await multiSourceAPI.getStockData(symbol)
-                  if (freshData && freshData.price > 0) {
-                    get().updatePriceFromWebSocket(symbol, freshData.price, freshData.change, freshData.changePercent)
+          // Use dynamic import instead of require to avoid SSR issues
+          import('@/lib/multi-source-api').then(({ getStockData }) => {
+            // Set up periodic updates using multi-source system
+            const allSymbols = get().watchlists.flatMap(w => w.items.map(item => item.symbol))
+            
+            if (allSymbols.length > 0) {
+              // Start periodic updates every 30 seconds
+              const updateInterval = setInterval(async () => {
+                try {
+                  for (const symbol of allSymbols) {
+                    const freshData = await getStockData(symbol)
+                    if (freshData && freshData.price > 0) {
+                      get().updatePriceFromWebSocket(symbol, freshData.price, freshData.change, freshData.changePercent)
+                    }
                   }
+                } catch (error) {
+                  console.error('Error in periodic update:', error)
                 }
-              } catch (error) {
-                console.error('Error in periodic update:', error)
+              }, 30000)
+              
+              set({ isConnectedToRealTime: true })
+              
+              // Store cleanup function for later use
+              get().stopRealTimeUpdates = () => {
+                clearInterval(updateInterval)
+                set({ isConnectedToRealTime: false })
               }
-            }, 30000)
-            
-            set({ isConnectedToRealTime: true })
-            
-            // Store cleanup function for later use
-            get().stopRealTimeUpdates = () => {
-              clearInterval(updateInterval)
+            } else {
               set({ isConnectedToRealTime: false })
             }
-          } else {
+          }).catch((error) => {
+            console.error('Error importing multi-source API:', error)
             set({ isConnectedToRealTime: false })
-          }
+          })
           
         } catch (error) {
           console.error('Error starting real-time updates:', error)
@@ -432,7 +739,6 @@ export const useWatchlistStore = create<WatchlistStore>()(
       
       stopRealTimeUpdates: () => {
         try {
-          const { polygonAPI } = require('@/lib/polygon-api')
           // The cleanup function is stored in startRealTimeUpdates
           set({ isConnectedToRealTime: false })
         } catch (error) {
@@ -460,10 +766,29 @@ export const useWatchlistStore = create<WatchlistStore>()(
         }))
       },
       
-      setHydrated: (hydrated: boolean) => set({ isHydrated: hydrated })
+      setHydrated: (hydrated: boolean) => set({ isHydrated: hydrated }),
+
+      clearWatchlists: () => {
+        console.log('🗑️ Watchlist Store: Clearing all watchlist data')
+        set({ 
+          watchlists: [],
+          activeWatchlist: null,
+          isLoading: false,
+          isConnectedToRealTime: false
+        })
+        // Note: This only clears the local store state
+        // The actual data remains in the database
+        // Use removeWatchlist() to delete from database
+      }
     }),
     {
-      name: 'watchlist-store'
+      name: 'watchlist-store',
+      partialize: (state) => ({ 
+        // Only persist UI state, not watchlist data
+        activeWatchlist: state.activeWatchlist,
+        isHydrated: state.isHydrated
+        // watchlists array is NOT persisted - always fetch fresh from database
+      }),
     }
   )
 )

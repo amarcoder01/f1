@@ -1,18 +1,96 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { prisma, testDatabaseConnection } from '@/lib/db'
+import { ensureDatabaseInitialized } from '@/lib/db-init'
 import { verifyPassword, hashPassword } from '@/lib/auth-security'
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production'
 
+// Global error handler to ensure JSON responses
+const handleError = (error: any, context: string) => {
+  console.error(`❌ Login API - ${context}:`, error)
+  
+  let errorMessage = 'An unexpected error occurred'
+  let statusCode = 500
+  
+  if (error instanceof Error) {
+    if (error.message.includes('DATABASE_URL')) {
+      errorMessage = 'Database configuration error. Please contact support.'
+      statusCode = 500
+    } else if (error.message.includes('connection')) {
+      errorMessage = 'Database connection failed. Please try again later.'
+      statusCode = 503
+    } else if (error.message.includes('timeout')) {
+      errorMessage = 'Request timeout. Please try again.'
+      statusCode = 408
+    } else if (error.message.includes('Engine is not yet connected')) {
+      errorMessage = 'Database service is starting up. Please try again in a moment.'
+      statusCode = 503
+    } else {
+      errorMessage = error.message
+    }
+  }
+  
+  return new NextResponse(
+    JSON.stringify({ 
+      success: false, 
+      error: errorMessage,
+      details: 'Please try again later or contact support if the issue persists.',
+      context: context
+    }),
+    { 
+      status: statusCode,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate'
+      }
+    }
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // Ensure database is initialized before proceeding
+    console.log('🔍 Login API - Ensuring database initialization...')
+    try {
+      await ensureDatabaseInitialized()
+      console.log('✅ Login API - Database initialization confirmed')
+    } catch (initError) {
+      console.error('❌ Login API - Database initialization failed:', initError)
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Database service is starting up. Please try again in a moment.',
+          details: 'The database is initializing and will be ready shortly.'
+        },
+        { status: 503 }
+      )
+    }
+
+    // Test database connection
+    console.log('🔍 Login API - Testing database connection...')
+    const isDatabaseConnected = await testDatabaseConnection()
+    
+    if (!isDatabaseConnected) {
+      console.error('❌ Login API - Database connection failed')
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Database connection failed. Please try again later.',
+          details: 'The database service is temporarily unavailable.'
+        },
+        { status: 503 }
+      )
+    }
+    
+    console.log('✅ Login API - Database connection successful')
+
     // Parse request body
     let body
     try {
       body = await request.json()
     } catch (error) {
-      console.error('JSON parsing failed:', error)
+      console.error('❌ Login API - JSON parsing failed:', error)
       return NextResponse.json(
         { success: false, error: 'Invalid request format' },
         { status: 400 }
@@ -29,12 +107,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() }
-    })
+    console.log('🔍 Login API - Attempting login for:', email)
+
+    // Find user with connection retry
+    let user
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: email.toLowerCase().trim() }
+      })
+    } catch (dbError) {
+      return handleError(dbError, 'Database query failed')
+    }
 
     if (!user) {
+      console.log('❌ Login API - User not found:', email)
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
         { status: 401 }
@@ -43,6 +129,7 @@ export async function POST(request: NextRequest) {
 
     // Check if account is disabled
     if (user.isAccountDisabled) {
+      console.log('❌ Login API - Account disabled:', email)
       return NextResponse.json(
         { success: false, error: 'Account is disabled' },
         { status: 403 }
@@ -51,6 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Check if account is locked
     if (user.isAccountLocked && user.lockoutUntil && user.lockoutUntil > new Date()) {
+      console.log('❌ Login API - Account locked:', email)
       return NextResponse.json(
         { success: false, error: 'Account is temporarily locked' },
         { status: 423 }
@@ -58,20 +146,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isValidPassword = await verifyPassword(password, user.password)
+    let isValidPassword
+    try {
+      isValidPassword = await verifyPassword(password, user.password)
+    } catch (passwordError) {
+      return handleError(passwordError, 'Password verification failed')
+    }
+
     if (!isValidPassword) {
+      console.log('❌ Login API - Invalid password for:', email)
+      
       // Update failed login attempts
       const newFailedAttempts = user.failedLoginAttempts + 1
       const shouldLockAccount = newFailedAttempts >= 5
 
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          failedLoginAttempts: newFailedAttempts,
-          lockoutUntil: shouldLockAccount ? new Date(Date.now() + 15 * 60 * 1000) : null,
-          isAccountLocked: shouldLockAccount
-        }
-      })
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginAttempts: newFailedAttempts,
+            lockoutUntil: shouldLockAccount ? new Date(Date.now() + 15 * 60 * 1000) : null,
+            isAccountLocked: shouldLockAccount
+          }
+        })
+      } catch (updateError) {
+        console.error('❌ Login API - Failed to update login attempts:', updateError)
+        // Continue with login failure response even if update fails
+      }
 
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
@@ -79,16 +180,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('✅ Login API - Password verified successfully for:', email)
+
     // Reset failed login attempts on successful login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginAttempts: 0,
-        lockoutUntil: null,
-        isAccountLocked: false,
-        lastLoginAt: new Date()
-      }
-    })
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          lockoutUntil: null,
+          isAccountLocked: false,
+          lastLoginAt: new Date()
+        }
+      })
+    } catch (updateError) {
+      console.error('❌ Login API - Failed to reset login attempts:', updateError)
+      // Continue with successful login even if update fails
+    }
 
     // Generate JWT token
     const accessToken = jwt.sign(
@@ -103,6 +211,8 @@ export async function POST(request: NextRequest) {
       JWT_SECRET,
       { expiresIn: '30d' }
     )
+
+    console.log('✅ Login API - Login successful for:', email)
 
     // Create success response
     const response = NextResponse.json({
@@ -142,10 +252,6 @@ export async function POST(request: NextRequest) {
     return response
 
   } catch (error) {
-    console.error('Login error:', error)
-    return NextResponse.json(
-      { success: false, error: 'An unexpected error occurred' },
-      { status: 500 }
-    )
+    return handleError(error, 'Unexpected error')
   }
 }

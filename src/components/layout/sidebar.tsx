@@ -26,7 +26,6 @@ import {
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { VidalityLogo, VidalityLogoCompact } from '@/components/ui/VidalityLogo'
 
 interface SidebarItem {
@@ -34,7 +33,6 @@ interface SidebarItem {
   label: string
   icon: React.ComponentType<{ className?: string }>
   href: string
-  badge?: string
   description?: string
 }
 
@@ -49,102 +47,91 @@ export function Sidebar() {
       label: 'Dashboard',
       icon: Home,
       href: '/dashboard',
-      description: 'Overview of your trading activity'
+      description: 'Trading overview and analytics'
     },
     {
       id: 'market-view',
-      label: 'Market View',
+      label: 'Market',
       icon: Building2,
       href: '/market-view',
-      description: 'Browse and search US stocks',
-      badge: 'STOCKS'
+      description: 'Browse and search stocks'
     },
     {
       id: 'top-movers',
       label: 'Top Movers',
       icon: TrendingDown,
       href: '/top-movers',
-      description: 'Top gainers and losers',
-      badge: 'LIVE'
+      description: 'Top gainers and losers'
     },
     {
       id: 'screener',
-      label: 'Stock Screener',
+      label: 'Screener',
       icon: Filter,
       href: '/screener',
-      description: 'Advanced stock screening with filters',
-      badge: 'SCREEN'
+      description: 'Advanced stock screening'
     },
     {
       id: 'watchlist',
       label: 'Watchlist',
       icon: Eye,
       href: '/watchlist',
-      description: 'Track your favorite assets'
+      description: 'Track favorite assets'
     },
     {
       id: 'paper-trading',
       label: 'Paper Trading',
       icon: Play,
       href: '/paper-trading',
-      description: 'Practice trading with virtual money',
-      badge: 'NEW'
+      description: 'Practice with virtual money'
     },
     {
       id: 'treadgpt',
-      label: 'TreadGPT Chat',
+      label: 'TreadGPT',
       icon: Bot,
       href: '/treadgpt',
-      description: 'AI-powered trading assistant',
-      badge: 'AI'
+      description: 'AI trading assistant'
     },
     {
       id: 'backtesting',
       label: 'Backtesting',
       icon: BarChart3,
       href: '/backtesting',
-      description: 'Advanced strategy backtesting platform',
-      badge: 'BACKTEST'
+      description: 'Strategy backtesting'
     },
     {
       id: 'ai-predictions',
       label: 'AI Predictions',
       icon: Brain,
       href: '/ai-predictions',
-      description: 'AI-powered market predictions',
-      badge: 'AI'
+      description: 'Market predictions'
     },
     {
       id: 'portfolio-manager',
-      label: 'Portfolio Manager',
+      label: 'Portfolio',
       icon: DollarSign,
       href: '/portfolio-manager',
-              description: 'Portfolio management',
-      badge: 'PRO'
+      description: 'Portfolio management'
     },
     {
       id: 'strategy-builder',
       label: 'Strategy Builder',
       icon: BrainCircuit,
       href: '/strategy-builder',
-      description: 'AI-powered strategy creation',
-      badge: 'BUILDER'
+      description: 'Create trading strategies'
     },
     {
       id: 'stock-comparison',
-      label: 'Stock Comparison',
+      label: 'Comparison',
       icon: Target,
       href: '/stock-comparison',
-      description: 'Compare stocks with AI analysis',
-      badge: 'COMPARE'
+      description: 'Compare stocks'
     },
     {
       id: 'advanced-charts',
-      label: 'Advanced Charts',
+      label: 'Charts',
       icon: TrendingUp,
       href: '/advanced-charts',
-      description: 'Professional charting with 50+ indicators',
-      badge: 'PRO'
+      description: 'Professional charting'
     }
   ]
 
@@ -235,11 +222,6 @@ export function Sidebar() {
                             </span>
                           )}
                         </div>
-                        {item.badge && (
-                          <Badge variant="secondary" className="text-xs">
-                            {item.badge}
-                          </Badge>
-                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
