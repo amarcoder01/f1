@@ -159,10 +159,12 @@ function mapExchangeCode(exchangeCode?: string): string {
 class PolygonApiService {
   private apiKey: string;
   private marketCapTracker: MarketCapTracker;
+  private snapshotCache: Map<string, { builtAt: number; date: string; stocks: ScreenerStock[] }>;
 
   constructor() {
     this.apiKey = API_KEY || '';
     this.marketCapTracker = new MarketCapTracker();
+    this.snapshotCache = new Map();
   }
 
   // Check if API key is available
@@ -601,6 +603,231 @@ class PolygonApiService {
     return true;
   }
 
+  // ===== NEW: Full-market utilities (non-breaking additions) =====
+  async getAllActiveUSTickers(filters?: FilterCriteria): Promise<Stock[]> {
+    const all: Stock[] = [];
+    let nextUrl: string | undefined = undefined;
+    let safetyPages = 0;
+    const maxPages = 200;
+
+    while (safetyPages++ < maxPages) {
+      let response: any;
+      if (nextUrl) {
+        response = await axios.get<PolygonTickerResponse>(nextUrl);
+      } else {
+        const params: any = {
+          apikey: this.apiKey,
+          market: 'stocks',
+          locale: 'us',
+          active: true,
+          limit: 1000,
+          sort: 'ticker',
+          order: 'asc',
+        };
+        if (filters?.search?.trim()) params.search = filters.search.trim();
+        if (filters?.exchange?.trim() && filters.exchange !== 'all') {
+          const exchangeMap: { [key: string]: string } = {
+            'NASDAQ': 'XNAS',
+            'NYSE': 'XNYS',
+            'NYSE Arca': 'ARCX',
+            'Cboe BZX': 'BATS',
+            'IEX': 'IEX',
+            'OTC Markets': 'OTC',
+            'NYSE American': 'AMEX'
+          };
+          params.exchange = exchangeMap[filters.exchange] || filters.exchange;
+        }
+        response = await axios.get<PolygonTickerResponse>(
+          `${POLYGON_BASE_URL}/v3/reference/tickers`,
+          { params }
+        );
+      }
+      const results = response?.data?.results || [];
+      if (!results.length) break;
+      all.push(...results);
+      nextUrl = response.data.next_url;
+      if (!nextUrl) break;
+    }
+    return all;
+  }
+
+  async getGroupedAggsForDate(dateISO: string): Promise<Map<string, { c: number; o: number; v: number }>> {
+    const out = new Map<string, { c: number; o: number; v: number }>();
+    try {
+      const resp = await axios.get(
+        `${POLYGON_BASE_URL}/v2/aggs/grouped/locale/us/market/stocks/${dateISO}`,
+        { params: { adjusted: true, apikey: this.apiKey } }
+      );
+      const results = resp?.data?.results || [];
+      for (const r of results) {
+        if (!r?.T) continue;
+        out.set(r.T, { c: r.c, o: r.o, v: r.v });
+      }
+    } catch (err) {
+      console.error('Grouped aggs fetch failed; will fallback to per-ticker when needed.', err);
+    }
+    return out;
+  }
+
+  async getOrBuildDailySnapshot(dateISO: string): Promise<ScreenerStock[]> {
+    const cached = this.snapshotCache.get(dateISO);
+    if (cached?.date === dateISO && Array.isArray(cached.stocks) && cached.stocks.length > 0) {
+      return cached.stocks;
+    }
+    const tickers = await this.getAllActiveUSTickers();
+    const grouped = await this.getGroupedAggsForDate(dateISO);
+    const merged: ScreenerStock[] = [];
+    for (const t of tickers) {
+      const g = grouped.get(t.ticker);
+      const price = g?.c;
+      const change = g && typeof g.c === 'number' && typeof g.o === 'number' ? g.c - g.o : undefined;
+      const change_percent = g && typeof g.c === 'number' && typeof g.o === 'number' && g.o !== 0 ? ((g.c - g.o) / g.o) * 100 : undefined;
+      const volume = g?.v;
+      merged.push({
+        ticker: t.ticker,
+        name: t.name,
+        price,
+        change,
+        change_percent,
+        volume,
+        sector: t.sic_description ? mapSicToSector(t.sic_description) : undefined,
+        exchange: mapExchangeCode(t.primary_exchange)
+      } as ScreenerStock);
+    }
+    this.snapshotCache.set(dateISO, { builtAt: Date.now(), date: dateISO, stocks: merged });
+    return merged;
+  }
+
+  async searchMarketSnapshot(
+    filters: FilterCriteria,
+    limit: number = 1000
+  ): Promise<{ stocks: ScreenerStock[]; totalCount: number; hasMore: boolean; date: string }> {
+    const dateISO = new Date().toISOString().split('T')[0];
+    let snapshot = await this.getOrBuildDailySnapshot(dateISO);
+    // First apply only non-price/volume/marketCap filters to avoid dropping symbols with missing fields
+    const prefiltered = snapshot.filter(s => {
+      if (filters.sector && filters.sector !== 'all' && s.sector !== filters.sector) return false;
+      if (filters.exchange && filters.exchange !== 'all' && s.exchange !== filters.exchange) return false;
+      if (filters.search && filters.search.trim()) {
+        const q = filters.search.trim().toLowerCase();
+        const inTicker = (s.ticker || '').toLowerCase().includes(q);
+        const inName = (s.name || '').toLowerCase().includes(q);
+        if (!inTicker && !inName) return false;
+      }
+      return true;
+    });
+
+    let candidates = prefiltered;
+
+    // Ensure volume is hydrated for candidates if volumeMin requested
+    const needsVolume = (filters.volumeMin !== undefined);
+    if (needsVolume) {
+      const missingVol = candidates.filter(s => typeof s.volume !== 'number');
+      if (missingVol.length > 0) {
+        const tickersVol = missingVol.map(s => s.ticker);
+        const batchSizeVol = 25;
+        for (let i = 0; i < tickersVol.length; i += batchSizeVol) {
+          const batch = tickersVol.slice(i, i + batchSizeVol);
+          try {
+            const prices = await this.batchGetStockPrices(batch, 25, 200, undefined, false);
+            const map = new Map(prices.map(p => [p.ticker, p]));
+            for (const s of missingVol) {
+              const p = map.get(s.ticker);
+              if (p) {
+                // hydrate volume (and price if helpful later)
+                s.volume = p.volume;
+                if (typeof s.price !== 'number') s.price = p.price;
+                if (typeof s.change !== 'number') s.change = p.change;
+                (s as any).change_percent = (s as any).change_percent ?? p.change_percent;
+              }
+            }
+          } catch {}
+        }
+      }
+      // Apply volume filter now
+      candidates = candidates.filter(s => !(filters.volumeMin !== undefined && (s.volume === undefined || s.volume < filters.volumeMin)));
+    }
+
+    // Ensure price is hydrated for candidates if price range requested
+    const needsPrice = (filters.priceMin !== undefined) || (filters.priceMax !== undefined);
+    if (needsPrice) {
+      const missing = candidates.filter(s => typeof s.price !== 'number');
+      if (missing.length > 0) {
+        const tickers = missing.map(s => s.ticker);
+        const batchSize = 25;
+        for (let i = 0; i < tickers.length; i += batchSize) {
+          const batch = tickers.slice(i, i + batchSize);
+          try {
+            const prices = await this.batchGetStockPrices(batch, 25, 200, undefined, false);
+            const map = new Map(prices.map(p => [p.ticker, p]));
+            for (const s of missing) {
+              const p = map.get(s.ticker);
+              if (p) {
+                s.price = p.price;
+                s.change = p.change;
+                (s as any).change_percent = p.change_percent;
+                if (typeof s.volume !== 'number') s.volume = p.volume;
+              }
+            }
+          } catch {}
+        }
+      }
+      candidates = candidates.filter(s => {
+        if (filters.priceMin !== undefined && (s.price === undefined || s.price < filters.priceMin)) return false;
+        if (filters.priceMax !== undefined && (s.price === undefined || s.price > filters.priceMax)) return false;
+        return true;
+      });
+    }
+
+    // Hydrate market cap only if needed, then apply market cap filters
+    const needsMarketCap = (filters.marketCapMin !== undefined) || (filters.marketCapMax !== undefined);
+    let hydrated = candidates;
+    if (needsMarketCap && candidates.length > 0) {
+      // Ensure price present for market cap calculation if missing
+      const missingPriceForMC = candidates.filter(s => typeof s.price !== 'number');
+      if (missingPriceForMC.length > 0) {
+        const tickersMP = missingPriceForMC.map(s => s.ticker);
+        const batchSizeMP = 25;
+        for (let i = 0; i < tickersMP.length; i += batchSizeMP) {
+          const batch = tickersMP.slice(i, i + batchSizeMP);
+          try {
+            const prices = await this.batchGetStockPrices(batch, 25, 200, undefined, false);
+            const map = new Map(prices.map(p => [p.ticker, p]));
+            for (const s of missingPriceForMC) {
+              const p = map.get(s.ticker);
+              if (p) {
+                s.price = p.price;
+                if (typeof s.volume !== 'number') s.volume = p.volume;
+              }
+            }
+          } catch {}
+        }
+      }
+      const enhanced: ScreenerStock[] = [];
+      const batchSize = 25;
+      for (let i = 0; i < candidates.length; i += batchSize) {
+        const batch = candidates.slice(i, i + batchSize);
+        const details = await Promise.all(
+          batch.map(async s => {
+            if (s.market_cap !== undefined && s.market_cap !== null) return s;
+            const d = await this.getTickerDetails(s.ticker, s.price);
+            return { ...s, market_cap: d.market_cap } as ScreenerStock;
+          })
+        );
+        enhanced.push(...details);
+      }
+      hydrated = enhanced.filter(s => {
+        if (filters.marketCapMin !== undefined && (s.market_cap === undefined || s.market_cap < filters.marketCapMin * 1000000)) return false;
+        if (filters.marketCapMax !== undefined && (s.market_cap === undefined || s.market_cap > filters.marketCapMax * 1000000)) return false;
+        return true;
+      });
+    }
+
+    const totalCount = hydrated.length;
+    const stocks = hydrated.slice(0, Math.min(limit, hydrated.length));
+    return { stocks, totalCount, hasMore: hydrated.length > limit, date: dateISO };
+  }
+
   // Get popular stocks
   async getPopularStocks(): Promise<string[]> {
     return [
@@ -859,6 +1086,19 @@ export const universalStockScreener = async (
     return await polygonApi.getUniversalScreenerResults(filters, limit, onProgress);
   } catch (error) {
     console.error('Error in universal stock screener:', error);
+    throw error;
+  }
+};
+
+// NEW: Universal screening via daily snapshot
+export const snapshotStockScreener = async (
+  filters: FilterCriteria,
+  limit: number = 1000
+): Promise<{ stocks: ScreenerStock[]; totalCount: number; hasMore: boolean; date: string }> => {
+  try {
+    return await polygonApi.searchMarketSnapshot(filters, limit);
+  } catch (error) {
+    console.error('Error in snapshot stock screener:', error);
     throw error;
   }
 };

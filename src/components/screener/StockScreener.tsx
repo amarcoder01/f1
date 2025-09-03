@@ -215,26 +215,23 @@ const StockScreener: React.FC = () => {
   const applyFilters = async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      const polygonService = new PolygonApiService();
-      const result = await polygonService.getUniversalScreenerResults(
-        filters,
-        40, // limit - load 40 stocks at a time
-        (current: number, total: number, message: string) => {
-          setBatchProgress({
-            isProcessing: true,
-            current,
-            total,
-            message
-          });
-        }
-      );
-      
-      // Apply sorting
-      const sortedResults = sortStocks(result.stocks, sortConfig);
+      // Call backend universal screener so filters (e.g., specific price) apply across full market
+      setBatchProgress({ isProcessing: true, current: 0, total: 100, message: 'Screening full market...' });
+      const response = await fetch('/api/screener', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filters,
+          limit: 200,
+          sort: { field: sortConfig.field, direction: sortConfig.direction },
+        }),
+      });
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const data = await response.json();
+      const results = Array.isArray(data.stocks) ? data.stocks : [];
+      const sortedResults = sortStocks(results, sortConfig);
       setStocks(sortedResults);
-      
       if (sortedResults.length === 0) {
         toast.warning('No stocks found matching your criteria. Try adjusting your filters.');
       } else {
