@@ -59,28 +59,28 @@ const FilterControls: React.FC<FilterControlsProps> = ({
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
           <Filter className="w-5 h-5 text-blue-600" />
-          Screening Filters
+          Market-Wide Filters
         </h2>
         <button
           onClick={onClearFilters}
-          className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+          className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
         >
           <X className="w-4 h-4" />
           Clear All
         </button>
       </div>
       
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-          <p className="text-sm text-blue-800 font-medium">Real-time Screening</p>
+          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          <p className="text-sm text-green-800 font-medium">Market-Wide Screening</p>
         </div>
-        <p className="text-xs text-blue-700 mt-1">
-          Filters applied across the complete market with live data
+        <p className="text-xs text-green-700 mt-1">
+          Filters applied across the ENTIRE US market (~10,000+ stocks)
         </p>
       </div>
 
@@ -211,9 +211,9 @@ const FilterControls: React.FC<FilterControlsProps> = ({
       <button
         onClick={onApplyFilters}
         disabled={loading}
-        className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+        className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {loading ? 'Applying Filters...' : 'Apply Filters'}
+        {loading ? 'Searching Market...' : 'Search Entire Market'}
       </button>
     </div>
   );
