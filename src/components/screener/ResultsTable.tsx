@@ -46,14 +46,6 @@ const ResultsTable: React.FC<ResultsTableProps> = ({
     return `$${value.toLocaleString()}`;
   };
 
-  const formatVolume = (value: number | undefined): string => {
-    if (value === undefined || value === null) return 'N/A';
-    if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
-    if (value >= 1e3) return `${(value / 1e3).toFixed(2)}K`;
-    return value.toLocaleString();
-  };
-
   const formatPercentage = (value: number | undefined): string => {
     if (value === undefined || value === null) return 'N/A';
     const formatted = `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
@@ -111,9 +103,7 @@ const ResultsTable: React.FC<ResultsTableProps> = ({
     { field: 'price' as keyof ScreenerStock, label: 'Price', width: 'w-24' },
     { field: 'change' as keyof ScreenerStock, label: 'Change', width: 'w-24' },
     { field: 'change_percent' as keyof ScreenerStock, label: 'Change %', width: 'w-24' },
-    { field: 'volume' as keyof ScreenerStock, label: 'Volume', width: 'w-24' },
     { field: 'market_cap' as keyof ScreenerStock, label: 'Market Cap', width: 'w-28' },
-    { field: 'sector' as keyof ScreenerStock, label: 'Sector', width: 'w-32' },
     { field: 'exchange' as keyof ScreenerStock, label: 'Exchange', width: 'w-20' },
   ];
 
@@ -127,7 +117,7 @@ const ResultsTable: React.FC<ResultsTableProps> = ({
               Screening Results
             </h2>
             <p className="text-sm text-muted-foreground">
-              {stocks.length} stocks found • {stocks.length > 0 ? 'Real-time data' : 'Apply filters to see results'}
+              {stocks.length} stocks found
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -149,14 +139,9 @@ const ResultsTable: React.FC<ResultsTableProps> = ({
               ) : (
                 <ChevronDown className="w-4 h-4" />
               )}
-              {loadingMore ? 'Loading...' : hasMore ? 'Load More' : 'All Loaded'}
+              {loadingMore ? 'Loading...' : hasMore ? 'Load More' : 'No more results'}
             </button>
-            {!hasMore && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground px-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                <span>All stocks loaded</span>
-              </div>
-            )}
+            {/* When fully loaded, we simply disable the button without extra banner */}
           </div>
         </div>
       </div>
@@ -225,25 +210,14 @@ const ResultsTable: React.FC<ResultsTableProps> = ({
                       </div>
                     </td>
                     <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
-                      <div className={`text-sm font-medium ${getPercentageColor(stock.changePercent)}`}>
-                        {formatPercentage(stock.changePercent)}
-                      </div>
-                    </td>
-                    <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
-                      <div className="text-sm text-foreground">
-                        <span className="hidden sm:inline">{formatVolume(stock.volume)}</span>
-                        <span className="sm:hidden">{formatVolume(stock.volume).replace(/[A-Z]/g, '')}</span>
+                      <div className={`text-sm font-medium ${getPercentageColor(stock.change_percent)}`}>
+                        {formatPercentage(stock.change_percent)}
                       </div>
                     </td>
                     <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">
                       <div className="text-sm text-foreground">
                         <span className="hidden sm:inline">{formatMarketCap(stock.market_cap)}</span>
                         <span className="sm:hidden">{formatMarketCap(stock.market_cap).replace(/[A-Z]/g, '')}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 lg:px-6 py-3 lg:py-4">
-                      <div className="text-sm text-foreground truncate max-w-24 lg:max-w-32" title={stock.sector}>
-                        {stock.sector || 'N/A'}
                       </div>
                     </td>
                     <td className="px-3 lg:px-6 py-3 lg:py-4 whitespace-nowrap">

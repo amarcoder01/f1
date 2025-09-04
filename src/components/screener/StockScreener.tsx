@@ -38,6 +38,11 @@ const StockScreener: React.FC = () => {
     field: 'ticker',
     direction: 'asc',
   });
+  // Server-side pagination state when market-wide filters are applied
+  const [filtersApplied, setFiltersApplied] = useState(false);
+  const [serverOffset, setServerOffset] = useState(0);
+  const [serverHasMore, setServerHasMore] = useState(false);
+  const SERVER_PAGE_SIZE = 200;
   
   // Pagination state
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
@@ -163,45 +168,62 @@ const StockScreener: React.FC = () => {
 
   // Load more stocks function for pagination
   const loadMoreStocks = async () => {
-    if (!hasMore || !nextCursor || loadingMore) {
+    // If market-wide filters are applied, use server-side pagination
+    if (filtersApplied) {
+      if (loadingMore || !serverHasMore) return;
+      setLoadingMore(true);
+      try {
+        setBatchProgress({ isProcessing: true, current: 0, total: 100, message: 'Loading more results...' });
+        const response = await fetch('/api/screener', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filters,
+            limit: SERVER_PAGE_SIZE,
+            offset: serverOffset,
+            sort: { field: sortConfig.field, direction: sortConfig.direction },
+          }),
+        });
+        if (!response.ok) throw new Error(`API ${response.status}`);
+        const data = await response.json();
+        const newStocks: ScreenerStock[] = Array.isArray(data.stocks) ? data.stocks : [];
+        const merged = sortStocks([...stocks, ...newStocks], sortConfig);
+        setStocks(merged);
+        const nextOffset = (data.offset ?? serverOffset) + newStocks.length;
+        setServerOffset(nextOffset);
+        setServerHasMore(!!data.hasMore);
+        toast.success(`Loaded ${newStocks.length} more results`);
+      } catch (error) {
+        console.error('Error loading more server results:', error);
+        toast.error('Failed to load more results');
+      } finally {
+        setLoadingMore(false);
+        setBatchProgress({ isProcessing: false, current: 0, total: 0, message: '' });
+      }
       return;
     }
 
+    // Default path: client-side pagination of locally loaded stocks
+    if (!hasMore || !nextCursor || loadingMore) {
+      return;
+    }
     setLoadingMore(true);
-    
     try {
-      // Set up progress tracking for loading more stocks
-      setBatchProgress({
-        isProcessing: true,
-        current: 0,
-        total: 100,
-        message: 'Loading additional stocks...'
-      });
-      
+      setBatchProgress({ isProcessing: true, current: 0, total: 100, message: 'Loading additional stocks...' });
       const result = await fetchAllUSStocks(nextCursor, 40, (current: number, total: number, message: string) => {
-        setBatchProgress({
-          isProcessing: true,
-          current,
-          total,
-          message
-        });
+        setBatchProgress({ isProcessing: true, current, total, message });
       });
-      
       const newAllStocks = [...allStocks, ...result.stocks];
       setAllStocks(newAllStocks);
-      
-      // Apply current filters to the new complete dataset
       const filteredStocks = applyClientSideFilters(newAllStocks, filters);
       const sortedStocks = sortStocks(filteredStocks, sortConfig);
       setStocks(sortedStocks);
-      
       setNextCursor(result.nextCursor);
       setHasMore(result.hasMore);
-      
       if (result.hasMore) {
         toast.success(`Loaded ${result.stocks.length} more stocks. Total: ${newAllStocks.length}`);
       } else {
-        toast.success(`Loaded ${result.stocks.length} more stocks. All stocks loaded! Total: ${newAllStocks.length}`);
+        toast.success(`Loaded ${result.stocks.length} more stocks. No more results. Total: ${newAllStocks.length}`);
       }
     } catch (error) {
       console.error('Error loading more stocks:', error);
@@ -223,7 +245,8 @@ const StockScreener: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filters,
-          limit: 200,
+          limit: SERVER_PAGE_SIZE,
+          offset: 0,
           sort: { field: sortConfig.field, direction: sortConfig.direction },
         }),
       });
@@ -232,6 +255,9 @@ const StockScreener: React.FC = () => {
       const results = Array.isArray(data.stocks) ? data.stocks : [];
       const sortedResults = sortStocks(results, sortConfig);
       setStocks(sortedResults);
+      setFiltersApplied(true);
+      setServerOffset((data.offset ?? 0) + results.length);
+      setServerHasMore(!!data.hasMore);
       if (sortedResults.length === 0) {
         toast.warning('No stocks found matching your criteria. Try adjusting your filters.');
       } else {
@@ -338,6 +364,9 @@ const StockScreener: React.FC = () => {
     // Reset to show all currently loaded stocks
     const sortedStocks = sortStocks(allStocks, sortConfig);
     setStocks(sortedStocks);
+    setFiltersApplied(false);
+    setServerOffset(0);
+    setServerHasMore(false);
     
     toast.info('Filters cleared. Showing loaded stocks. Apply filters to search the complete market.');
   };
@@ -517,7 +546,7 @@ const StockScreener: React.FC = () => {
                 error={error || undefined}
                 sortConfig={sortConfig}
                 onSort={handleSort}
-                hasMore={hasMore}
+                hasMore={filtersApplied ? serverHasMore : hasMore}
                 loadingMore={loadingMore}
                 onLoadMore={loadMoreStocks}
                 onExportCSV={exportToCSV}

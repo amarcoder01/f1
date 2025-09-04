@@ -46,51 +46,42 @@ const FilterControls: React.FC<FilterControlsProps> = ({
   ];
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
+    <div className="bg-card border border-border rounded-lg shadow-md p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <Filter className="w-5 h-5 text-blue-600" />
-          Screening Filters
+        <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <Filter className="w-5 h-5 text-foreground" />
+          Filters
         </h2>
         <button
           onClick={onClearFilters}
-          className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+          className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
         >
           <X className="w-4 h-4" />
           Clear All
         </button>
       </div>
-      
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-          <p className="text-sm text-blue-800 font-medium">Real-time Screening</p>
-        </div>
-        <p className="text-xs text-blue-700 mt-1">
-          Filters applied across the complete market with live data
-        </p>
-      </div>
+
 
       {/* Search */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           Search by Symbol or Company
         </label>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <input
             type="text"
             placeholder="e.g., AAPL or Apple"
             value={filters.search || ''}
             onChange={(e) => handleInputChange('search', e.target.value)}
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground"
           />
         </div>
       </div>
 
       {/* Price Range */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           Price Range ($)
         </label>
         <div className="grid grid-cols-2 gap-2">
@@ -99,7 +90,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
             placeholder="Min"
             value={filters.priceMin || ''}
             onChange={(e) => handleInputChange('priceMin', e.target.value ? parseFloat(e.target.value) : undefined)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground"
             min="0"
             step="0.01"
           />
@@ -108,7 +99,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
             placeholder="Max"
             value={filters.priceMax || ''}
             onChange={(e) => handleInputChange('priceMax', e.target.value ? parseFloat(e.target.value) : undefined)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground"
             min="0"
             step="0.01"
           />
@@ -117,7 +108,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
 
       {/* Market Cap Range */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           Market Cap ($ Millions)
         </label>
         <div className="grid grid-cols-2 gap-2">
@@ -126,7 +117,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
             placeholder="Min"
             value={filters.marketCapMin || ''}
             onChange={(e) => handleInputChange('marketCapMin', e.target.value ? parseFloat(e.target.value) : undefined)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground"
             min="0"
           />
           <input
@@ -134,7 +125,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
             placeholder="Max"
             value={filters.marketCapMax || ''}
             onChange={(e) => handleInputChange('marketCapMax', e.target.value ? parseFloat(e.target.value) : undefined)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground"
             min="0"
           />
         </div>
@@ -142,7 +133,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
 
       {/* Volume */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           Minimum Volume
         </label>
         <input
@@ -150,7 +141,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
           placeholder="e.g., 1000000"
           value={filters.volumeMin || ''}
           onChange={(e) => handleInputChange('volumeMin', e.target.value ? parseFloat(e.target.value) : undefined)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground"
           min="0"
         />
       </div>
@@ -159,13 +150,13 @@ const FilterControls: React.FC<FilterControlsProps> = ({
 
       {/* Sector */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           Sector
         </label>
         <select
           value={filters.sector || ''}
           onChange={(e) => handleInputChange('sector', e.target.value || undefined)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-background text-foreground"
         >
           <option value="">All Sectors</option>
           {sectors.map((sector) => (
@@ -178,13 +169,13 @@ const FilterControls: React.FC<FilterControlsProps> = ({
 
       {/* Exchange */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           Exchange
         </label>
         <select
           value={filters.exchange || ''}
           onChange={(e) => handleInputChange('exchange', e.target.value || undefined)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-background text-foreground"
         >
           <option value="">All Exchanges</option>
           {exchanges.map((exchange) => (
@@ -201,7 +192,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
         disabled={loading}
         className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {loading ? 'Applying Filters...' : 'Apply Filters'}
+        {loading ? 'Applying...' : 'Apply Filters'}
       </button>
     </div>
   );

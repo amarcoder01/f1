@@ -64,7 +64,7 @@ function mapSicToSector(description: string): string {
   
   // Healthcare
   if (desc.includes('pharmaceutical') || desc.includes('medical') || desc.includes('healthcare') ||
-      desc.includes('biotechnology') || desc.includes('health')) {
+      desc.includes('biotechnology') || desc.includes('health') || desc.includes('diagnostic') || desc.includes('research')) {
     return 'Healthcare';
   }
   
@@ -238,25 +238,70 @@ class PolygonApiService {
     }
 
     try {
-      const response = await axios.get<PolygonPriceResponse>(
-        `${POLYGON_BASE_URL}/v2/aggs/ticker/${ticker}/prev`,
-        {
-          params: {
-            adjusted: true,
-            apikey: this.apiKey,
-          },
-        }
-      );
+      // First try to get today's data if available
+      const today = this.getTodayDateString();
+      let price: number | undefined;
+      let volume: number | undefined;
+      let change: number | undefined;
+      let changePercent: number | undefined;
 
-      if (!response.data.results || response.data.results.length === 0) {
-        throw new Error(`No price data available for ${ticker}`);
+      try {
+        const todayResponse = await axios.get(
+          `${POLYGON_BASE_URL}/v2/aggs/ticker/${ticker}/range/1/day/${today}/${today}`,
+          {
+            params: {
+              adjusted: true,
+              apikey: this.apiKey,
+            },
+            timeout: 8000
+          }
+        );
+
+        if (todayResponse.data.results && todayResponse.data.results.length > 0) {
+          const todayData = todayResponse.data.results[0];
+          price = todayData.c; // Close price
+          volume = todayData.v;
+          
+          // Calculate change from open if available
+          if (todayData.o && todayData.c) {
+            change = todayData.c - todayData.o;
+            changePercent = (change / todayData.o) * 100;
+          }
+        }
+      } catch (todayError) {
+        console.warn(`Today's data not available for ${ticker}, using previous day`);
       }
 
-      const result = response.data.results[0];
-      const price = result.c;
-      const volume = result.v;
-      const change = result.c - result.o;
-      const changePercent = ((change / result.o) * 100);
+      // If no today data, fall back to previous day
+      if (price === undefined) {
+        const response = await axios.get<PolygonPriceResponse>(
+          `${POLYGON_BASE_URL}/v2/aggs/ticker/${ticker}/prev`,
+          {
+            params: {
+              adjusted: true,
+              apikey: this.apiKey,
+            },
+            timeout: 8000
+          }
+        );
+
+        if (!response.data.results || response.data.results.length === 0) {
+          throw new Error(`No price data available for ${ticker}`);
+        }
+
+        const result = response.data.results[0];
+        price = result.c;
+        volume = result.v;
+        
+        // For previous day data, no change
+        change = 0;
+        changePercent = 0;
+      }
+
+      // Validate price data
+      if (typeof price !== 'number' || isNaN(price) || price <= 0) {
+        throw new Error(`Invalid price data for ${ticker}: ${price}`);
+      }
 
       let market_cap: number | undefined = undefined;
       
@@ -272,13 +317,225 @@ class PolygonApiService {
       return {
         ticker,
         price,
-        change,
-        change_percent: changePercent,
-        volume,
+        change: change || 0,
+        change_percent: changePercent || 0,
+        volume: volume || 0,
         market_cap
       };
     } catch (error) {
       console.error(`Error fetching price for ${ticker}:`, error);
+      throw error;
+    }
+  }
+
+  // Get intraday snapshot for accurate today's change, change %, and volume
+  async getStockSnapshot(ticker: string, includeFinancials: boolean = true): Promise<StockPrice> {
+    if (!this.hasValidApiKey()) {
+      throw new Error('Polygon.io API key is required for stock data');
+    }
+
+    try {
+      // Use the more reliable v2/aggs endpoint for current day data
+      const today = new Date();
+      const isWeekend = today.getDay() === 0 || today.getDay() === 6;
+      const isMarketHours = this.isMarketOpen();
+      
+      let price: number | undefined;
+      let change: number | undefined;
+      let change_percent: number | undefined;
+      let volume: number | undefined;
+
+      if (isMarketHours && !isWeekend) {
+        // During market hours, get real-time data
+        try {
+          const realtimeResponse = await axios.get(
+            `${POLYGON_BASE_URL}/v2/aggs/ticker/${ticker}/range/1/minute/${this.getTodayDateString()}/${this.getTodayDateString()}`,
+            { 
+              params: { 
+                apikey: this.apiKey,
+                adjusted: true,
+                sort: 'desc',
+                limit: 1
+              }, 
+              timeout: 10000 
+            }
+          );
+          
+          if (realtimeResponse.data.results && realtimeResponse.data.results.length > 0) {
+            const latest = realtimeResponse.data.results[0];
+            price = latest.c; // Close price of latest minute
+            volume = latest.v;
+          }
+        } catch (realtimeError) {
+          console.warn(`Real-time data failed for ${ticker}, falling back to daily data`);
+        }
+      }
+
+      // If we don't have real-time data, get daily aggregated data
+      if (price === undefined) {
+        const dailyResponse = await axios.get(
+          `${POLYGON_BASE_URL}/v2/aggs/ticker/${ticker}/range/1/day/${this.getTodayDateString()}/${this.getTodayDateString()}`,
+          { 
+            params: { 
+              apikey: this.apiKey,
+              adjusted: true
+            }, 
+            timeout: 10000 
+          }
+        );
+
+        if (dailyResponse.data.results && dailyResponse.data.results.length > 0) {
+          const todayData = dailyResponse.data.results[0];
+          price = todayData.c; // Close price
+          volume = todayData.v;
+          
+          // Calculate change from open
+          if (todayData.o && todayData.c) {
+            change = todayData.c - todayData.o;
+            change_percent = (change / todayData.o) * 100;
+          }
+        }
+      }
+
+      // If still no data, get previous day data as fallback
+      if (price === undefined) {
+        const prevResponse = await axios.get(
+          `${POLYGON_BASE_URL}/v2/aggs/ticker/${ticker}/prev`,
+          {
+            params: {
+              adjusted: true,
+              apikey: this.apiKey,
+            },
+            timeout: 10000
+          }
+        );
+
+        if (prevResponse.data.results && prevResponse.data.results.length > 0) {
+          const prevData = prevResponse.data.results[0];
+          price = prevData.c;
+          volume = prevData.v;
+          change = 0; // No change for previous day
+          change_percent = 0;
+        }
+      }
+
+      // Validate we have essential data
+      if (price === undefined) {
+        throw new Error(`Unable to get price data for ${ticker}`);
+      }
+
+      // If we still don't have change data, calculate from previous close
+      if (change === undefined || change_percent === undefined) {
+        try {
+          const prevCloseResponse = await axios.get(
+            `${POLYGON_BASE_URL}/v2/aggs/ticker/${ticker}/prev`,
+            {
+              params: {
+                adjusted: true,
+                apikey: this.apiKey,
+              },
+              timeout: 5000
+            }
+          );
+
+          if (prevCloseResponse.data.results && prevCloseResponse.data.results.length > 0) {
+            const prevClose = prevCloseResponse.data.results[0].c;
+            if (prevClose > 0) {
+              change = price - prevClose;
+              change_percent = (change / prevClose) * 100;
+            }
+          }
+        } catch (prevCloseError) {
+          // If we can't get previous close, set change to 0
+          change = 0;
+          change_percent = 0;
+        }
+      }
+
+      let market_cap: number | undefined = undefined;
+      if (includeFinancials && typeof price === 'number') {
+        try {
+          const financialData = await this.getTickerDetails(ticker, price);
+          market_cap = financialData.market_cap;
+        } catch {}
+      }
+
+      return { ticker, price, change, change_percent, volume, market_cap } as StockPrice;
+    } catch (error) {
+      console.error(`Error in getStockSnapshot for ${ticker}:`, error);
+      // Fallback to previous-close based calculation if snapshot fails
+      const prev = await this.getStockPrice(ticker, includeFinancials);
+      return { ...prev, change: 0, change_percent: 0 } as StockPrice;
+    }
+  }
+
+  // Batch process stock snapshots with rate limiting
+  async batchGetStockSnapshots(
+    tickers: string[], 
+    batchSize: number = 15, 
+    delayMs: number = 1000, 
+    onProgress?: (current: number, total: number, message: string) => void,
+    includeFinancials: boolean = true
+  ): Promise<StockPrice[]> {
+    if (!this.hasValidApiKey()) {
+      throw new Error('Polygon.io API key is required for stock data');
+    }
+
+    try {
+      const allSnapshots: StockPrice[] = [];
+      const totalBatches = Math.ceil(tickers.length / batchSize);
+      
+      for (let i = 0; i < tickers.length; i += batchSize) {
+        const batch = tickers.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        
+        if (onProgress) {
+          onProgress(i, tickers.length, `Processing batch ${batchNumber}/${totalBatches}`);
+        }
+        
+        try {
+          const promises = batch.map(ticker => this.getStockSnapshot(ticker, includeFinancials));
+          const results = await Promise.allSettled(promises);
+
+          // Collect fulfilled
+          const batchSnapshots: StockPrice[] = [];
+          const rejectedTickers: string[] = [];
+          results.forEach((res, idx) => {
+            if (res.status === 'fulfilled') {
+              batchSnapshots.push(res.value);
+            } else {
+              rejectedTickers.push(batch[idx]);
+            }
+          });
+
+          // Attempt per-item fallback for rejected via previous-close API
+          if (rejectedTickers.length > 0) {
+            const fallbackResults = await Promise.allSettled(
+              rejectedTickers.map(t => this.getStockPrice(t, includeFinancials))
+            );
+            fallbackResults.forEach(fr => {
+              if (fr.status === 'fulfilled') batchSnapshots.push(fr.value);
+            });
+          }
+
+          allSnapshots.push(...batchSnapshots);
+          
+          if (onProgress) {
+            const completed = Math.min(i + batchSize, tickers.length);
+            onProgress(completed, tickers.length, `Completed batch ${batchNumber}/${totalBatches}`);
+          }
+          
+          if (i + batchSize < tickers.length) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+        } catch (batchError) {
+          console.error(`Error processing batch ${batchNumber}:`, batchError);
+        }
+      }
+      
+      return allSnapshots;
+    } catch (error) {
+      console.error('Error in batch snapshot fetching:', error);
       throw error;
     }
   }
@@ -729,7 +986,7 @@ class PolygonApiService {
         for (let i = 0; i < tickersVol.length; i += batchSizeVol) {
           const batch = tickersVol.slice(i, i + batchSizeVol);
           try {
-            const prices = await this.batchGetStockPrices(batch, 25, 200, undefined, false);
+            const prices = await this.batchGetStockSnapshots(batch, 25, 200, undefined, false);
             const map = new Map(prices.map(p => [p.ticker, p]));
             for (const s of missingVol) {
               const p = map.get(s.ticker);
@@ -758,7 +1015,7 @@ class PolygonApiService {
         for (let i = 0; i < tickers.length; i += batchSize) {
           const batch = tickers.slice(i, i + batchSize);
           try {
-            const prices = await this.batchGetStockPrices(batch, 25, 200, undefined, false);
+            const prices = await this.batchGetStockSnapshots(batch, 25, 200, undefined, false);
             const map = new Map(prices.map(p => [p.ticker, p]));
             for (const s of missing) {
               const p = map.get(s.ticker);
@@ -791,7 +1048,7 @@ class PolygonApiService {
         for (let i = 0; i < tickersMP.length; i += batchSizeMP) {
           const batch = tickersMP.slice(i, i + batchSizeMP);
           try {
-            const prices = await this.batchGetStockPrices(batch, 25, 200, undefined, false);
+            const prices = await this.batchGetStockSnapshots(batch, 25, 200, undefined, false);
             const map = new Map(prices.map(p => [p.ticker, p]));
             for (const s of missingPriceForMC) {
               const p = map.get(s.ticker);
@@ -837,6 +1094,109 @@ class PolygonApiService {
       'SPOT', 'ZOOM', 'SQ', 'TWTR', 'SNAP'
     ];
   }
+
+  // Helper method to check if market is currently open
+  private isMarketOpen(): boolean {
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    const utcMinute = now.getUTCMinutes();
+    const utcTime = utcHour * 100 + utcMinute;
+    
+    // US Market hours: 9:30 AM - 4:00 PM ET (14:30 - 21:00 UTC)
+    // Note: This is a simplified check, doesn't account for holidays
+    return utcTime >= 1430 && utcTime <= 2100;
+  }
+
+  // Helper method to get today's date in YYYY-MM-DD format
+  private getTodayDateString(): string {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  }
+
+  // Validate and clean stock data to ensure quality
+  private validateStockData(stock: any): stock is ScreenerStock {
+    // Basic validation
+    if (!stock || typeof stock !== 'object') return false;
+    if (!stock.ticker || typeof stock.ticker !== 'string') return false;
+    if (!stock.name || typeof stock.name !== 'string') return false;
+    
+    // Price validation
+    if (stock.price !== undefined && stock.price !== null) {
+      if (typeof stock.price !== 'number' || isNaN(stock.price) || stock.price <= 0) {
+        stock.price = undefined; // Reset invalid price
+      }
+    }
+    
+    // Volume validation
+    if (stock.volume !== undefined && stock.volume !== null) {
+      if (typeof stock.volume !== 'number' || isNaN(stock.volume) || stock.volume < 0) {
+        stock.volume = undefined; // Reset invalid volume
+      }
+    }
+    
+    // Change validation
+    if (stock.change !== undefined && stock.change !== null) {
+      if (typeof stock.change !== 'number' || isNaN(stock.change)) {
+        stock.change = undefined;
+      }
+    }
+    
+    // Change percent validation
+    if (stock.change_percent !== undefined && stock.change_percent !== null) {
+      if (typeof stock.change_percent !== 'number' || isNaN(stock.change_percent)) {
+        stock.change_percent = undefined;
+      }
+    }
+    
+    // Market cap validation
+    if (stock.market_cap !== undefined && stock.market_cap !== null) {
+      if (typeof stock.market_cap !== 'number' || isNaN(stock.market_cap) || stock.market_cap < 0) {
+        stock.market_cap = undefined;
+      }
+    }
+    
+    return true;
+  }
+
+  // Enhanced error handling for API calls
+  private async makePolygonRequest(endpoint: string, params: any = {}, timeout: number = 10000): Promise<any> {
+    try {
+      const response = await axios.get(`${POLYGON_BASE_URL}${endpoint}`, {
+        params: { ...params, apikey: this.apiKey },
+        timeout
+      });
+      
+      // Validate response structure
+      if (!response.data) {
+        throw new Error('Empty response from Polygon API');
+      }
+      
+      // Check for API error messages
+      if (response.data.error) {
+        throw new Error(`Polygon API error: ${response.data.error}`);
+      }
+      
+      // Check for rate limiting
+      if (response.status === 429) {
+        throw new Error('API rate limit exceeded. Please try again later.');
+      }
+      
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          throw new Error('Invalid Polygon.io API key. Please check your configuration.');
+        } else if (error.response?.status === 429) {
+          throw new Error('API rate limit exceeded. Please try again later.');
+        } else if (error.response?.status === 404) {
+          throw new Error(`Endpoint not found: ${endpoint}`);
+        } else if (error.code === 'ECONNABORTED') {
+          throw new Error('Request timeout. The API may be experiencing high load.');
+        }
+      }
+      throw error;
+    }
+  }
 }
 
 const polygonApi = new PolygonApiService();
@@ -851,7 +1211,14 @@ export const fetchStockTickers = async (filters?: FilterCriteria, limit: number 
     }
     
     const tickerSymbols = tickers.map(t => t.ticker);
-    const prices = await polygonApi.batchGetStockPrices(tickerSymbols, 15, 1000, undefined, true);
+    const prices = await polygonApi.batchGetStockSnapshots(tickerSymbols, 15, 1000, undefined, true);
+    // Fallback: fill any missing prices via prev-close API
+    const missingPriceTickers = tickerSymbols.filter(t => !prices.find(p => p.ticker === t && typeof p.price === 'number'));
+    if (missingPriceTickers.length > 0) {
+      const fallbacks = await Promise.allSettled(missingPriceTickers.map(t => polygonApi.getStockPrice(t, true)));
+      const fulfilled = fallbacks.filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled').map(r => r.value);
+      prices.push(...fulfilled);
+    }
     
     const stocksWithPrices: ScreenerStock[] = await Promise.all(tickers.map(async ticker => {
       const priceData = prices.find(p => p.ticker === ticker.ticker);
@@ -913,8 +1280,15 @@ export const fetchAllUSStocks = async (
       onProgress(0, tickerSymbols.length, 'Fetching price data for stocks...');
     }
     
-    const prices = await polygonApi.batchGetStockPrices(tickerSymbols, 15, 1000, onProgress, true);
+    const prices = await polygonApi.batchGetStockSnapshots(tickerSymbols, 15, 1000, onProgress, true);
     console.log(`💰 Fetched price data for ${prices.length} stocks`);
+    // Fallback: fill any missing prices via prev-close API
+    const missingPriceTickers = tickerSymbols.filter(t => !prices.find(p => p.ticker === t && typeof p.price === 'number'));
+    if (missingPriceTickers.length > 0) {
+      const fallbacks = await Promise.allSettled(missingPriceTickers.map(t => polygonApi.getStockPrice(t, true)));
+      const fulfilled = fallbacks.filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled').map(r => r.value);
+      prices.push(...fulfilled);
+    }
     
     const stocksWithPrices: ScreenerStock[] = await Promise.all(result.stocks.map(async ticker => {
       const priceData = prices.find(p => p.ticker === ticker.ticker);
@@ -977,7 +1351,14 @@ export const searchStocks = async (query: string, limit: number = 100): Promise<
     
     if (searchResults && searchResults.length > 0) {
       const tickerSymbols = searchResults.map(s => s.ticker);
-      const prices = await polygonApi.batchGetStockPrices(tickerSymbols, 15, 1000, undefined, true);
+      const prices = await polygonApi.batchGetStockSnapshots(tickerSymbols, 15, 1000, undefined, true);
+      // Fallback for missing price
+      const missingPriceTickers = tickerSymbols.filter(t => !prices.find(p => p.ticker === t && typeof p.price === 'number'));
+      if (missingPriceTickers.length > 0) {
+        const fallbacks = await Promise.allSettled(missingPriceTickers.map(t => polygonApi.getStockPrice(t, true)));
+        const fulfilled = fallbacks.filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled').map(r => r.value);
+        prices.push(...fulfilled);
+      }
       
       const stocksWithPrices: ScreenerStock[] = await Promise.all(searchResults.map(async ticker => {
         const priceData = prices.find(p => p.ticker === ticker.ticker);
@@ -1035,7 +1416,14 @@ export const getPopularStocks = async (): Promise<ScreenerStock[]> => {
       last_updated_utc: new Date().toISOString()
     }));
     
-    const prices = await polygonApi.batchGetStockPrices(popularTickers, 15, 1000, undefined, true);
+    const prices = await polygonApi.batchGetStockSnapshots(popularTickers, 15, 1000, undefined, true);
+    // Fallback for missing price
+    const missingPriceTickers = popularTickers.filter(t => !prices.find(p => p.ticker === t && typeof p.price === 'number'));
+    if (missingPriceTickers.length > 0) {
+      const fallbacks = await Promise.allSettled(missingPriceTickers.map(t => polygonApi.getStockPrice(t, true)));
+      const fulfilled = fallbacks.filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled').map(r => r.value);
+      prices.push(...fulfilled);
+    }
     
     const stocksWithPrices: ScreenerStock[] = await Promise.all(tickers.map(async ticker => {
       const priceData = prices.find(p => p.ticker === ticker.ticker);

@@ -42,10 +42,11 @@ export async function POST(req: NextRequest) {
 		const body = await req.json().catch(() => ({}))
 		const filters: FilterCriteria = body?.filters || {}
 		const limit: number = typeof body?.limit === 'number' ? body.limit : 200
+		const offset: number = typeof body?.offset === 'number' && body.offset > 0 ? Math.floor(body.offset) : 0
 		const sort = body?.sort as { field?: string; direction?: 'asc' | 'desc' } | undefined
 
 		const tradingDate = getTradingDateISO()
-		const cacheKey = `${tradingDate}::${normalizeFilters(filters)}::${limit}`
+		const cacheKey = `${tradingDate}::${normalizeFilters(filters)}::${limit}::${offset}`
 		const cached = memoryCache.get(cacheKey)
 		if (cached) {
 			return NextResponse.json({
@@ -66,10 +67,11 @@ export async function POST(req: NextRequest) {
 			result = { stocks: uni.stocks, totalCount: uni.totalCount, hasMore: uni.hasMore }
 		}
 
-		let stocks = result.stocks
+		// Sort the full set first
+		let full = result.stocks || []
 		if (sort?.field && (sort.direction === 'asc' || sort.direction === 'desc')) {
-			const field = sort.field as keyof (typeof stocks)[number]
-			stocks = [...stocks].sort((a, b) => {
+			const field = sort.field as keyof (typeof full)[number]
+			full = [...full].sort((a, b) => {
 				const av = a[field] as any
 				const bv = b[field] as any
 				if (av === undefined && bv === undefined) return 0
@@ -87,11 +89,18 @@ export async function POST(req: NextRequest) {
 			})
 		}
 
+		// Apply offset/limit slicing after sorting
+		const start = Math.max(0, offset)
+		const end = Math.min(start + limit, full.length)
+		const stocks = full.slice(start, end)
+		const hasMore = end < full.length
+
 		const payload = {
 			stocks,
-			totalCount: result.totalCount ?? stocks.length,
-			hasMore: !!result.hasMore,
+			totalCount: result.totalCount ?? full.length,
+			hasMore,
 			tradingDate,
+			offset: start,
 			cached: false,
 		}
 

@@ -379,23 +379,7 @@ const StockScreener: React.FC = () => {
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-6">
-            <h1 className="text-3xl font-bold text-gray-900">
-              Professional Stock Screener
-            </h1>
-            <p className="mt-2 text-gray-600">
-              Enterprise-grade stock screening with real-time market data and advanced analytics
-            </p>
-            <div className="mt-3 flex items-center gap-2">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Market Coverage
-              </span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                Real-time Data
-              </span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                Enterprise Ready
-              </span>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-900">Stock Screener</h1>
           </div>
         </div>
       </div>
@@ -510,19 +494,11 @@ const StockScreener: React.FC = () => {
                     </>
                   )}
                 </button>
-                <p className="mt-2 text-sm text-gray-500">
-                  Showing {allStocks.length} stocks. Click to load more.
-                </p>
+                <p className="mt-2 text-sm text-gray-500">Showing {allStocks.length} stocks.</p>
               </div>
             )}
             
-            {!hasMore && allStocks.length > 0 && (
-              <div className="mt-6 text-center">
-                <p className="text-sm text-gray-500">
-                  All available stocks loaded ({allStocks.length} total)
-                </p>
-              </div>
-            )}
+            {!hasMore && allStocks.length > 0 && null}
           </div>
         </div>
       </div>
