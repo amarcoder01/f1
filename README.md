@@ -1,2033 +1,1231 @@
-# Vidality Trading Platform - Expert Technical Documentation
-## Professional Trading Solutions for Modern Investors
+# Vidality Trading Platform - Testing Documentation
+## Comprehensive Testing Guide for QA Engineers
 
-**Document Version:** 2.0  
+**Document Version:** 1.0  
 **Last Updated:** January 2025  
-**Maintained by:** Vidality Development Team  
-**Classification:** Internal Technical Documentation
+**Maintained by:** Vidality QA Team  
+**Classification:** Internal Testing Documentation
 
 ---
 
 ## Table of Contents
-1. [Executive Summary](#executive-summary)
-2. [System Architecture](#system-architecture)
-3. [Technology Stack](#technology-stack)
-4. [Database Architecture](#database-architecture)
-5. [API Architecture](#api-architecture)
-6. [Frontend Architecture](#frontend-architecture)
-7. [Authentication & Security](#authentication--security)
-8. [Real-time Data System](#real-time-data-system)
-9. [AI & Machine Learning](#ai--machine-learning)
-10. [Backtesting Engine](#backtesting-engine)
-11. [Deployment & Infrastructure](#deployment--infrastructure)
-12. [Development Workflow](#development-workflow)
-13. [Testing Strategy](#testing-strategy)
-14. [Performance Optimization](#performance-optimization)
-15. [Monitoring & Analytics](#monitoring--analytics)
-16. [Quality Assurance & Testing](#quality-assurance--testing)
-17. [Security Audit & Compliance](#security-audit--compliance)
-18. [Future Roadmap](#future-roadmap)
+1. [Overview](#overview)
+2. [Test Environment Setup](#test-environment-setup)
+3. [Running Tests](#running-tests)
+4. [Feature Testing Guide](#feature-testing-guide)
+5. [Test Cases & Acceptance Criteria](#test-cases--acceptance-criteria)
+6. [Known Limitations & Edge Cases](#known-limitations--edge-cases)
+7. [Bug Reporting & Issue Tracking](#bug-reporting--issue-tracking)
+8. [Performance Testing](#performance-testing)
+9. [Security Testing](#security-testing)
+10. [Test Data Management](#test-data-management)
+11. [Continuous Integration](#continuous-integration)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Executive Summary
+## Overview
 
-**Vidality** is a next-generation, institutional-grade trading platform engineered for professional traders and serious investors. Built with cutting-edge technologies and enterprise-level architecture, it delivers real-time market data, AI-powered analysis, advanced charting, paper trading, portfolio management, and sophisticated backtesting capabilities for US stock markets.
+### Testing Scope
+The Vidality Trading Platform requires comprehensive testing across multiple layers:
+- **Frontend Testing**: React components, user interactions, responsive design
+- **Backend Testing**: API endpoints, database operations, business logic
+- **Integration Testing**: End-to-end workflows, third-party integrations
+- **Performance Testing**: Load testing, response times, scalability
+- **Security Testing**: Authentication, authorization, data protection
 
-### 🎯 **Platform Overview**
-- **Target Users**: Professional traders, portfolio managers, quantitative analysts, and serious retail investors
-- **Market Focus**: US stock markets (NYSE, NASDAQ) with real-time data and institutional-grade tools
-- **Technology Stack**: Modern web technologies with Python ML integration and cloud-native architecture
-- **Compliance**: Built with financial industry standards and security best practices
-
-### 🚀 **Key Features & Capabilities**
-- **Real-time Market Data**: Multi-source data aggregation with WebSocket support and 30-second cache TTL
-- **AI-Powered Analysis**: Machine learning predictions, TradeGPT assistant, and document analysis
-- **Advanced Charting**: Professional financial charts with 50+ technical indicators and drawing tools
-- **Paper Trading**: Risk-free trading simulation with realistic order execution and position management
-- **Portfolio Management**: Comprehensive portfolio tracking, analytics, and performance metrics
-- **Backtesting Engine**: Professional-grade strategy testing with Qlib integration and Monte Carlo simulation
-- **Security**: Bank-grade security with MFA, encrypted data transmission, and threat monitoring
-- **Scalability**: Microservices architecture designed for high-volume trading and data processing
-
-### 📊 **Technical Excellence**
-- **Performance**: Sub-200ms API response times with 99.9% uptime SLA
-- **Reliability**: Multi-source data validation with automatic fallback mechanisms
-- **Security**: Comprehensive authentication, rate limiting, and security event monitoring
-- **Scalability**: Cloud-native architecture with horizontal scaling capabilities
-- **Maintainability**: Clean code architecture with comprehensive testing and documentation
+### Testing Philosophy
+- **User-Centric**: Focus on real-world user scenarios and workflows
+- **Risk-Based**: Prioritize testing of critical financial operations
+- **Automated First**: Maximize test automation while maintaining manual testing for complex scenarios
+- **Continuous**: Integrate testing into the development lifecycle
 
 ---
 
-## System Architecture
-
-### Super Detailed Complete Architecture Diagram
-
-```mermaid
-graph TB
-    subgraph "Client Layer - Frontend Applications"
-        WEB[Web Browser - Next.js 14 App]
-        MOBILE[Mobile Responsive UI]
-        TELEGRAM[Telegram Bot - VidalityPulse]
-    end
-    
-    subgraph "CDN & Infrastructure"
-        CDN[Cloudflare CDN]
-        RENDER[Render.com Hosting]
-        LB[Load Balancer]
-    end
-    
-    subgraph "Next.js Application Layer"
-        subgraph "App Router Structure"
-            ROOT_LAYOUT[Root Layout - globals.css, ThemeProvider, NextAuthProvider]
-            AUTH_LAYOUT[Authenticated Layout - AuthGuard, MainLayout]
-            PUBLIC_PAGES[Public Pages - Landing, Login, Register, About, Help]
-            PROTECTED_PAGES[Protected Pages - Dashboard, Trading, Portfolio, etc.]
-        end
-        
-        subgraph "API Routes - 50+ Endpoints"
-            AUTH_API[Auth APIs - NextAuth, JWT, OAuth, Password Reset]
-            MARKET_API[Market Data APIs - Stocks, Quotes, Indices, Status]
-            TRADING_API[Trading APIs - Paper Trading, Orders, Positions]
-            PORTFOLIO_API[Portfolio APIs - CRUD, Analytics, Trades]
-            WATCHLIST_API[Watchlist APIs - Items, Real-time Updates]
-            ALERTS_API[Price Alerts APIs - Scheduler, History, Notifications]
-            AI_API[AI APIs - Predictions, Analysis, Chat, File Analysis]
-            ML_API[ML APIs - Strategy Builder, Backtesting, Qlib]
-            NEWS_API[News APIs - Market News, Sentiment, Earnings]
-            CHART_API[Chart APIs - Data, Images, Technical Indicators]
-            USER_API[User APIs - Preferences, Settings, Migration]
-            TELEMETRY_API[Telemetry APIs - Events, Analytics, Security]
-        end
-        
-        subgraph "Middleware & Security"
-            AUTH_MIDDLEWARE[Auth Middleware - Route Protection, JWT Validation]
-            SECURITY_HEADERS[Security Headers - CSP, HSTS, XSS Protection]
-            RATE_LIMITING[Rate Limiting - API Protection, Auth Throttling]
-        end
-    end
-    
-    subgraph "Component Architecture - 166+ Components"
-        subgraph "Layout Components"
-            HEADER[Header - Theme Toggle, Settings, Auth Provider]
-            SIDEBAR[Sidebar - Navigation, Collapsible, Mobile Drawer]
-            FOOTER[Footer - Legal Links, Company Info, Social]
-            MAIN_LAYOUT[Main Layout - Responsive Grid, Scrollable Content]
-        end
-        
-        subgraph "Feature Components"
-            DASHBOARD[Dashboard - Overview, Stats, Quick Actions]
-            CHARTS[Charts - Recharts, Visx, Lightweight Charts, 50+ Indicators]
-            TRADING[Trading - Paper Trading, Order Forms, Position Management]
-            PORTFOLIO[Portfolio - Analytics, Performance, Allocation]
-            WATCHLIST[Watchlist - Real-time Updates, Multi-source Data]
-            SCREENER[Screener - Advanced Filters, Technical Analysis]
-            NEWS[News - Market Updates, Sentiment Analysis, AI Insights]
-            AI_CHAT[AI Chat - TradeGPT, File Analysis, Expert Chat]
-            ALERTS[Alerts - Price Alerts, Notifications, History]
-            AUTH[Auth - Login, Register, OAuth, Password Reset]
-        end
-        
-        subgraph "UI Components - shadcn/ui"
-            BUTTONS[Buttons - Variants, Sizes, States]
-            FORMS[Forms - Validation, Error Handling, Accessibility]
-            MODALS[Modals - Dialogs, Sheets, Popovers]
-            TABLES[Tables - Sortable, Filterable, Paginated]
-            CARDS[Cards - Trading Cards, Stats Cards, Info Cards]
-            INPUTS[Inputs - Text, Number, Select, Date, File]
-            NAVIGATION[Navigation - Tabs, Breadcrumbs, Pagination]
-            FEEDBACK[Feedback - Toasts, Alerts, Loading States]
-        end
-    end
-    
-    subgraph "State Management - Zustand Stores"
-        UI_STORE[UI Store - Sidebar, Theme, Notifications, Mobile State]
-        AUTH_STORE[Auth Store - User, Token, Login/Logout, OAuth]
-        WATCHLIST_STORE[Watchlist Store - Lists, Items, Real-time Updates]
-        PORTFOLIO_STORE[Portfolio Store - Portfolios, Positions, Trades]
-        PRICE_ALERT_STORE[Price Alert Store - Alerts, History, Scheduler]
-        NEWS_STORE[News Store - Articles, Sentiment, Unread Counts]
-        MARKET_DATA_STORE[Market Data Store - Stocks, Crypto, Forex, Commodities]
-        CHAT_STORE[Chat Store - Sessions, Messages, AI Responses]
-        SETTINGS_STORE[Settings Store - User Preferences, Chart Settings]
-    end
-    
-    subgraph "Data Services Layer"
-        subgraph "Multi-Source Data APIs"
-            POLYGON_SVC[Polygon.io Service - Primary US Stock Data]
-            ENHANCED_POLYGON[Enhanced Polygon Service - Validated Data]
-            YAHOO_SVC[Yahoo Finance Service - Fallback Data]
-            YFINANCE_SVC[yfinance Service - Python Integration]
-            MULTI_SOURCE[Multi-Source API - Fallback Chain, Validation]
-        end
-        
-        subgraph "Real-time Data System"
-            REALTIME_SYS[Real-time Data System - WebSocket, Polling]
-            DATA_VALIDATION[Data Validation - Quality Scoring, Sector Validation]
-            CACHE_LAYER[Cache Layer - Redis, Memory, 30s TTL]
-            WEBSOCKET[WebSocket Manager - Polygon.io, Subscriptions]
-        end
-        
-        subgraph "Market Services"
-            MARKET_STATUS[Market Status Service - Open/Closed, Holidays]
-            INDICES_SVC[Market Indices Service - S&P 500, NASDAQ, DOW]
-            TOP_MOVERS[Top Movers Service - Gainers, Losers, Volume]
-            SECTOR_SVC[Sector Service - Performance, Analysis]
-        end
-    end
-    
-    subgraph "AI & Machine Learning Layer"
-        subgraph "AI Services"
-            OPENAI_SVC[OpenAI Service - GPT-4/5, Chat, Analysis]
-            CHARTIMG_SVC[ChartImg Service - Chart Generation]
-            GOOGLE_VISION[Google Vision API - Image Analysis]
-            AZURE_COGNITIVE[Azure Cognitive Services - Document Processing]
-        end
-        
-        subgraph "ML Pipeline"
-            QLIB_ENGINE[Qlib Engine - Microsoft's Quantitative Platform]
-            ML_MODELS[ML Models - Transformer, LSTM, CNN-LSTM, Ensemble]
-            BACKTEST_ENGINE[Backtesting Engine - Strategy Testing, Performance]
-            FEATURE_ENG[Feature Engineering - Technical Indicators, Sentiment]
-        end
-        
-        subgraph "Prediction Services"
-            AI_PREDICTIONS[AI Predictions - Market Forecasts, Confidence]
-            ML_PREDICTIONS[ML Predictions - Pattern Recognition, Signals]
-            ENHANCED_PREDICTIONS[Enhanced Predictions - Monte Carlo, Uncertainty]
-            STRATEGY_BUILDER[Strategy Builder - Rule-based, AI-assisted]
-        end
-    end
-    
-    subgraph "Database Layer - PostgreSQL with Prisma ORM"
-        subgraph "Core Tables"
-            USER_TABLE[User - Authentication, Preferences, Security]
-            PORTFOLIO_TABLE[Portfolio - User Portfolios, Metadata]
-            POSITION_TABLE[Position - Stock Positions, Quantities, Prices]
-            TRADE_TABLE[Trade - Buy/Sell Transactions, History]
-            WATCHLIST_TABLE[Watchlist - User Watchlists, Names]
-            WATCHLIST_ITEM_TABLE[WatchlistItem - Symbols, Real-time Data]
-        end
-        
-        subgraph "Trading Tables"
-            PAPER_ACCOUNT_TABLE[PaperTradingAccount - Virtual Accounts]
-            PAPER_POSITION_TABLE[PaperPosition - Virtual Positions]
-            PAPER_ORDER_TABLE[PaperOrder - Virtual Orders]
-            PAPER_TRANSACTION_TABLE[PaperTransaction - Virtual Transactions]
-        end
-        
-        subgraph "Alert & Notification Tables"
-            PRICE_ALERT_TABLE[PriceAlert - Price Targets, Conditions]
-            PRICE_ALERT_HISTORY_TABLE[PriceAlertHistory - Triggered Alerts]
-        end
-        
-        subgraph "AI & Chat Tables"
-            CHAT_SESSION_TABLE[ChatSession - AI Chat Sessions]
-            CHAT_MESSAGE_TABLE[ChatMessage - Messages, Metadata]
-        end
-        
-        subgraph "Security & Analytics Tables"
-            TELEMETRY_TABLE[TelemetryEvent - User Actions, Performance]
-            SECURITY_TABLE[SecurityEvent - Security Events, Risk Scores]
-            LOGIN_ATTEMPT_TABLE[LoginAttempt - Failed Logins, IP Tracking]
-            EMAIL_VERIFICATION_TABLE[EmailVerificationCode - Email Verification]
-        end
-        
-        subgraph "NextAuth Tables"
-            ACCOUNT_TABLE[Account - OAuth Providers, Tokens]
-            SESSION_TABLE[Session - User Sessions, Expiry]
-            VERIFICATION_TOKEN_TABLE[VerificationToken - Email Verification]
-        end
-    end
-    
-    subgraph "External Integrations"
-        subgraph "Data Providers"
-            POLYGON_IO[Polygon.io - Real-time US Stock Data, WebSocket]
-            YAHOO_FINANCE[Yahoo Finance - Stock Data, News, Fundamentals]
-            ALPHA_VANTAGE[Alpha Vantage - Market Data, Technical Indicators]
-            CHARTIMG_API[ChartImg API - Professional Chart Generation]
-        end
-        
-        subgraph "AI Services"
-            OPENAI_API[OpenAI API - GPT-4/5, Embeddings, Chat]
-            GOOGLE_SEARCH[Google Search API - Web Search, News]
-            AZURE_AI[Azure AI Services - Document Analysis, Vision]
-        end
-        
-        subgraph "Communication Services"
-            SENDGRID[SendGrid - Email Notifications, Alerts]
-            TWILIO[Twilio - SMS Notifications, 2FA]
-            TELEGRAM_BOT[Telegram Bot - VidalityPulse, Real-time Updates]
-        end
-    end
-    
-    subgraph "Python ML Services"
-        subgraph "Qlib Integration"
-            QLIB_BACKTEST[qlib_backtesting.py - Strategy Backtesting]
-            ENHANCED_BACKTEST[enhanced_backtesting_engine.py - Advanced Backtesting]
-            QLIB_CONFIG[qlib_config.py - Configuration Management]
-        end
-        
-        subgraph "ML Models"
-            TRANSFORMER_MODEL[Transformer Model - Price Predictions]
-            LSTM_MODEL[LSTM Model - Time Series Analysis]
-            CNN_LSTM_MODEL[CNN-LSTM Model - Pattern Recognition]
-            ENSEMBLE_MODEL[Ensemble Model - Combined Predictions]
-        end
-        
-        subgraph "Data Processing"
-            YFINANCE_PY[yfinance - Python Stock Data]
-            PANDAS[Pandas - Data Manipulation]
-            NUMPY[NumPy - Numerical Computing]
-            SCIPY[SciPy - Scientific Computing]
-        end
-    end
-    
-    subgraph "Deployment & Infrastructure"
-        subgraph "Build Process"
-            NPM_BUILD[npm run build - Next.js Build]
-            PYTHON_DEPS[install-python-deps.sh - Python Dependencies]
-            PRISMA_GEN[Prisma Generate - Database Client]
-            PRISMA_MIGRATE[Prisma Migrate - Database Schema]
-        end
-        
-        subgraph "Environment Management"
-            ENV_VARS[Environment Variables - API Keys, Database URLs]
-            RENDER_YAML[render.yaml - Deployment Configuration]
-            DOCKERFILE[Dockerfile - Container Configuration]
-        end
-        
-        subgraph "Monitoring & Analytics"
-            TELEMETRY_SYS[Telemetry System - User Actions, Performance]
-            SECURITY_MONITOR[Security Monitoring - Failed Logins, Suspicious Activity]
-            ERROR_LOGGING[Error Logging - Application Errors, API Failures]
-        end
-    end
-    
-    subgraph "Subprojects"
-        subgraph "Market Page - React/Vite"
-            MARKET_APP[Market App - Stock Dashboard]
-            STOCK_DASHBOARD[Stock Dashboard Component]
-            STOCK_LIST[Stock List Component]
-            STOCK_SERVICE[Stock Service - API Integration]
-        end
-        
-        subgraph "Screener - React/Vite"
-            SCREENER_APP[Screener App - Stock Filtering]
-            FILTER_CONTROLS[Filter Controls Component]
-            RESULTS_TABLE[Results Table Component]
-            POLYGON_API[Polygon API Service]
-        end
-    end
-    
-    %% Client Layer Connections
-    WEB --> CDN
-    MOBILE --> CDN
-    TELEGRAM --> TELEGRAM_BOT
-    
-    %% Infrastructure Connections
-    CDN --> RENDER
-    RENDER --> LB
-    LB --> ROOT_LAYOUT
-    
-    %% Application Layer Connections
-    ROOT_LAYOUT --> AUTH_LAYOUT
-    AUTH_LAYOUT --> PROTECTED_PAGES
-    ROOT_LAYOUT --> PUBLIC_PAGES
-    
-    %% API Routes Connections
-    PROTECTED_PAGES --> AUTH_API
-    PROTECTED_PAGES --> MARKET_API
-    PROTECTED_PAGES --> TRADING_API
-    PROTECTED_PAGES --> PORTFOLIO_API
-    PROTECTED_PAGES --> WATCHLIST_API
-    PROTECTED_PAGES --> ALERTS_API
-    PROTECTED_PAGES --> AI_API
-    PROTECTED_PAGES --> ML_API
-    PROTECTED_PAGES --> NEWS_API
-    PROTECTED_PAGES --> CHART_API
-    PROTECTED_PAGES --> USER_API
-    PROTECTED_PAGES --> TELEMETRY_API
-    
-    %% Component Connections
-    AUTH_LAYOUT --> HEADER
-    AUTH_LAYOUT --> SIDEBAR
-    AUTH_LAYOUT --> MAIN_LAYOUT
-    MAIN_LAYOUT --> DASHBOARD
-    MAIN_LAYOUT --> CHARTS
-    MAIN_LAYOUT --> TRADING
-    MAIN_LAYOUT --> PORTFOLIO
-    MAIN_LAYOUT --> WATCHLIST
-    MAIN_LAYOUT --> SCREENER
-    MAIN_LAYOUT --> NEWS
-    MAIN_LAYOUT --> AI_CHAT
-    MAIN_LAYOUT --> ALERTS
-    
-    %% State Management Connections
-    DASHBOARD --> UI_STORE
-    DASHBOARD --> AUTH_STORE
-    DASHBOARD --> WATCHLIST_STORE
-    DASHBOARD --> PORTFOLIO_STORE
-    DASHBOARD --> PRICE_ALERT_STORE
-    CHARTS --> MARKET_DATA_STORE
-    TRADING --> PORTFOLIO_STORE
-    PORTFOLIO --> PORTFOLIO_STORE
-    WATCHLIST --> WATCHLIST_STORE
-    NEWS --> NEWS_STORE
-    AI_CHAT --> CHAT_STORE
-    ALERTS --> PRICE_ALERT_STORE
-    
-    %% Data Services Connections
-    MARKET_API --> POLYGON_SVC
-    MARKET_API --> ENHANCED_POLYGON
-    MARKET_API --> YAHOO_SVC
-    MARKET_API --> YFINANCE_SVC
-    MARKET_API --> MULTI_SOURCE
-    MULTI_SOURCE --> REALTIME_SYS
-    REALTIME_SYS --> DATA_VALIDATION
-    REALTIME_SYS --> CACHE_LAYER
-    REALTIME_SYS --> WEBSOCKET
-    
-    %% AI/ML Connections
-    AI_API --> OPENAI_SVC
-    AI_API --> CHARTIMG_SVC
-    AI_API --> GOOGLE_VISION
-    AI_API --> AZURE_COGNITIVE
-    ML_API --> QLIB_ENGINE
-    ML_API --> ML_MODELS
-    ML_API --> BACKTEST_ENGINE
-    ML_API --> FEATURE_ENG
-    AI_API --> AI_PREDICTIONS
-    ML_API --> ML_PREDICTIONS
-    ML_API --> ENHANCED_PREDICTIONS
-    ML_API --> STRATEGY_BUILDER
-    
-    %% Database Connections
-    AUTH_API --> USER_TABLE
-    AUTH_API --> ACCOUNT_TABLE
-    AUTH_API --> SESSION_TABLE
-    AUTH_API --> VERIFICATION_TOKEN_TABLE
-    PORTFOLIO_API --> PORTFOLIO_TABLE
-    PORTFOLIO_API --> POSITION_TABLE
-    PORTFOLIO_API --> TRADE_TABLE
-    WATCHLIST_API --> WATCHLIST_TABLE
-    WATCHLIST_API --> WATCHLIST_ITEM_TABLE
-    TRADING_API --> PAPER_ACCOUNT_TABLE
-    TRADING_API --> PAPER_POSITION_TABLE
-    TRADING_API --> PAPER_ORDER_TABLE
-    TRADING_API --> PAPER_TRANSACTION_TABLE
-    ALERTS_API --> PRICE_ALERT_TABLE
-    ALERTS_API --> PRICE_ALERT_HISTORY_TABLE
-    AI_API --> CHAT_SESSION_TABLE
-    AI_API --> CHAT_MESSAGE_TABLE
-    TELEMETRY_API --> TELEMETRY_TABLE
-    TELEMETRY_API --> SECURITY_TABLE
-    AUTH_API --> LOGIN_ATTEMPT_TABLE
-    AUTH_API --> EMAIL_VERIFICATION_TABLE
-    
-    %% External Integrations
-    POLYGON_SVC --> POLYGON_IO
-    YAHOO_SVC --> YAHOO_FINANCE
-    MARKET_API --> ALPHA_VANTAGE
-    CHART_API --> CHARTIMG_API
-    OPENAI_SVC --> OPENAI_API
-    AI_API --> GOOGLE_SEARCH
-    AI_API --> AZURE_AI
-    ALERTS_API --> SENDGRID
-    AUTH_API --> TWILIO
-    TELEGRAM_BOT --> TELEGRAM_BOT
-    
-    %% Python ML Services
-    QLIB_ENGINE --> QLIB_BACKTEST
-    QLIB_ENGINE --> ENHANCED_BACKTEST
-    QLIB_ENGINE --> QLIB_CONFIG
-    ML_MODELS --> TRANSFORMER_MODEL
-    ML_MODELS --> LSTM_MODEL
-    ML_MODELS --> CNN_LSTM_MODEL
-    ML_MODELS --> ENSEMBLE_MODEL
-    YFINANCE_SVC --> YFINANCE_PY
-    BACKTEST_ENGINE --> PANDAS
-    BACKTEST_ENGINE --> NUMPY
-    BACKTEST_ENGINE --> SCIPY
-    
-    %% Deployment
-    RENDER --> NPM_BUILD
-    RENDER --> PYTHON_DEPS
-    RENDER --> PRISMA_GEN
-    RENDER --> PRISMA_MIGRATE
-    RENDER --> ENV_VARS
-    RENDER --> RENDER_YAML
-    RENDER --> TELEMETRY_SYS
-    RENDER --> SECURITY_MONITOR
-    RENDER --> ERROR_LOGGING
-    
-    %% Subprojects
-    MARKET_APP --> STOCK_DASHBOARD
-    MARKET_APP --> STOCK_LIST
-    MARKET_APP --> STOCK_SERVICE
-    SCREENER_APP --> FILTER_CONTROLS
-    SCREENER_APP --> RESULTS_TABLE
-    SCREENER_APP --> POLYGON_API
-```
-
-### Detailed Component Analysis
-
-#### Frontend Architecture Deep Dive
-
-**1. Next.js 14 App Router Structure**
-- **Root Layout** (`src/app/layout.tsx`): Global providers, theme management, authentication setup
-- **Authenticated Layout** (`src/app/(authenticated)/layout.tsx`): Protected route wrapper with AuthGuard
-- **Public Pages**: Landing page, authentication pages, legal pages
-- **Protected Pages**: Dashboard, trading features, portfolio management, AI tools
-
-**2. Component Hierarchy (166+ Components)**
-```
-src/components/
-├── auth/ (Authentication Components)
-│   ├── AuthGuard.tsx - Route protection and redirect logic
-│   ├── LoginModal.tsx - Modal-based login interface
-│   ├── RegisterModal.tsx - User registration modal
-│   ├── NextAuthProvider.tsx - NextAuth.js integration
-│   └── AuthProvider.tsx - Custom auth state management
-├── layout/ (Layout Components)
-│   ├── Header.tsx - Top navigation with theme toggle
-│   ├── Sidebar.tsx - Collapsible navigation with 15+ menu items
-│   ├── Footer.tsx - Legal links and company information
-│   └── main-layout.tsx - Main application layout wrapper
-├── dashboard/ (Dashboard Components)
-│   ├── PortfolioCard.tsx - Portfolio overview cards
-│   ├── AlertsPanel.tsx - Price alerts management
-│   ├── TopMoversWidget.tsx - Market movers display
-│   └── TopGainersLosersWidget.tsx - Gainers/losers widget
-├── charts/ (Chart Components)
-│   ├── AdvancedChart.tsx - Professional charting interface
-│   ├── TechnicalIndicators.tsx - 50+ technical indicators
-│   ├── ChartControls.tsx - Chart customization controls
-│   └── ChartExport.tsx - Chart export and sharing
-├── trading/ (Trading Components)
-│   ├── PaperTradingInterface.tsx - Virtual trading interface
-│   ├── OrderForm.tsx - Buy/sell order forms
-│   ├── PositionManager.tsx - Position tracking and management
-│   └── TradeHistory.tsx - Transaction history display
-├── portfolio/ (Portfolio Components)
-│   ├── PortfolioOverview.tsx - Portfolio performance summary
-│   ├── PositionList.tsx - Current positions display
-│   ├── PerformanceChart.tsx - Portfolio performance visualization
-│   └── AllocationChart.tsx - Asset allocation pie chart
-├── watchlist/ (Watchlist Components)
-│   ├── WatchlistManager.tsx - Watchlist CRUD operations
-│   ├── WatchlistItem.tsx - Individual stock items
-│   ├── RealTimeUpdates.tsx - Live price updates
-│   └── WatchlistSelector.tsx - Multi-watchlist selection
-├── screener/ (Screener Components)
-│   ├── FilterControls.tsx - Advanced filtering interface
-│   ├── ResultsTable.tsx - Filtered results display
-│   ├── TechnicalFilters.tsx - Technical analysis filters
-│   └── FundamentalFilters.tsx - Fundamental analysis filters
-├── news/ (News Components)
-│   ├── NewsFeed.tsx - Market news display
-│   ├── SentimentAnalysis.tsx - AI-powered sentiment analysis
-│   ├── NewsCard.tsx - Individual news article cards
-│   └── MarketInsights.tsx - AI-generated market insights
-├── ai-predictions/ (AI Components)
-│   ├── PredictionCard.tsx - AI prediction display
-│   ├── ConfidenceIndicator.tsx - Prediction confidence visualization
-│   ├── ModelSelector.tsx - ML model selection interface
-│   └── PredictionHistory.tsx - Historical prediction accuracy
-├── chat/ (Chat Components)
-│   ├── ChatInterface.tsx - TradeGPT chat interface
-│   ├── MessageBubble.tsx - Chat message display
-│   ├── FileUpload.tsx - Document analysis upload
-│   └── ExpertChat.tsx - Expert-level chat interface
-├── ui/ (UI Components - shadcn/ui)
-│   ├── button.tsx - Button variants and states
-│   ├── card.tsx - Card components for content display
-│   ├── input.tsx - Form input components
-│   ├── select.tsx - Dropdown selection components
-│   ├── table.tsx - Data table components
-│   ├── modal.tsx - Modal and dialog components
-│   ├── toast.tsx - Notification toast components
-│   └── VidalityLogo.tsx - Brand logo with animations
-└── theme/ (Theme Components)
-    ├── ThemeProvider.tsx - Theme context provider
-    ├── ThemeToggle.tsx - Dark/light mode toggle
-    └── ThemeSwitcher.tsx - Advanced theme selection
-```
-
-**3. State Management Architecture (Zustand Stores)**
-```typescript
-// UI Store - Interface state management
-interface UIStore {
-  sidebarCollapsed: boolean
-  sidebarOpenMobile: boolean
-  theme: 'light' | 'dark' | 'system'
-  activeTab: string
-  notifications: Notification[]
-  setSidebarCollapsed: (collapsed: boolean) => void
-  setTheme: (theme: string) => void
-  addNotification: (notification: Notification) => void
-}
-
-// Auth Store - Authentication state
-interface AuthStore {
-  user: User | null
-  token: string | null
-  isAuthenticated: boolean
-  isLoading: boolean
-  error: string | null
-  login: (credentials: LoginCredentials) => Promise<void>
-  logout: () => void
-  checkAuth: () => Promise<void>
-}
-
-// Watchlist Store - Watchlist management
-interface WatchlistStore {
-  watchlists: Watchlist[]
-  isLoading: boolean
-  error: string | null
-  loadWatchlists: () => Promise<void>
-  addToWatchlist: (symbol: string, watchlistId: string) => Promise<void>
-  removeFromWatchlist: (itemId: string) => Promise<void>
-  updateWatchlistItem: (itemId: string, data: Partial<WatchlistItem>) => Promise<void>
-}
-
-// Portfolio Store - Portfolio management
-interface PortfolioStore {
-  portfolios: Portfolio[]
-  positions: Position[]
-  trades: Trade[]
-  isLoading: boolean
-  loadPortfolios: () => Promise<void>
-  createPortfolio: (name: string) => Promise<void>
-  addPosition: (portfolioId: string, position: Position) => Promise<void>
-  executeTrade: (trade: Trade) => Promise<void>
-}
-
-// Price Alert Store - Alert management
-interface PriceAlertStore {
-  alerts: PriceAlert[]
-  history: PriceAlertHistory[]
-  isLoading: boolean
-  loadAlerts: () => Promise<void>
-  createAlert: (alert: CreatePriceAlertRequest) => Promise<void>
-  cancelAlert: (alertId: string) => Promise<void>
-  updateAlert: (alertId: string, data: Partial<PriceAlert>) => Promise<void>
-}
-
-// Market Data Store - Real-time data
-interface MarketDataStore {
-  stocks: Stock[]
-  crypto: Crypto[]
-  forex: Forex[]
-  commodities: Commodity[]
-  realTimeData: RealTimeData[]
-  isLoading: boolean
-  subscribeToSymbol: (symbol: string) => void
-  unsubscribeFromSymbol: (symbol: string) => void
-  updateRealTimeData: (data: RealTimeData) => void
-}
-
-// News Store - News and sentiment
-interface NewsStore {
-  articles: NewsArticle[]
-  sentiment: MarketSentiment
-  unreadCount: number
-  isLoading: boolean
-  loadNews: () => Promise<void>
-  markAsRead: (articleId: string) => void
-  loadSentiment: (symbol: string) => Promise<void>
-}
-
-// Chat Store - AI chat sessions
-interface ChatStore {
-  sessions: ChatSession[]
-  currentSession: ChatSession | null
-  messages: ChatMessage[]
-  isLoading: boolean
-  createSession: (title: string) => Promise<void>
-  sendMessage: (content: string, file?: File) => Promise<void>
-  loadSession: (sessionId: string) => Promise<void>
-}
-
-// Settings Store - User preferences
-interface SettingsStore {
-  settings: UserSettings
-  isLoading: boolean
-  updateSettings: (settings: Partial<UserSettings>) => Promise<void>
-  resetSettings: () => void
-}
-```
-
-**4. API Routes Architecture (50+ Endpoints)**
-
-**Authentication APIs** (`/api/auth/`)
-- `[...nextauth]/route.ts` - NextAuth.js configuration
-- `login/route.ts` - User login with JWT tokens
-- `register/route.ts` - User registration with validation
-- `logout/route.ts` - User logout and token cleanup
-- `refresh/route.ts` - Token refresh mechanism
-- `verify/route.ts` - Email verification
-- `forgot-password/route.ts` - Password reset initiation
-- `reset-password/route.ts` - Password reset completion
-- `google-callback/route.ts` - Google OAuth callback handling
-
-**Market Data APIs** (`/api/market-data/`, `/api/stocks/`)
-- `enhanced/route.ts` - Enhanced market data with validation
-- `route.ts` - Stock data with pagination and filtering
-- `[symbol]/route.ts` - Individual stock data
-- `[symbol]/analysis/route.ts` - Stock analysis and insights
-- `[symbol]/details/route.ts` - Detailed stock information
-- `search/route.ts` - Stock search functionality
-- `batch-quote/route.ts` - Batch stock quotes
-- `sector/route.ts` - Sector-based stock data
-
-**Trading APIs** (`/api/paper-trading/`)
-- `accounts/route.ts` - Paper trading account management
-- `accounts/[id]/route.ts` - Individual account operations
-- `orders/route.ts` - Order management
-- `orders/[id]/cancel/route.ts` - Order cancellation
-- `enhanced/route.ts` - Enhanced paper trading features
-
-**Portfolio APIs** (`/api/portfolio/`)
-- `route.ts` - Portfolio CRUD operations
-- `[id]/route.ts` - Individual portfolio management
-- `[id]/positions/route.ts` - Position management
-- `[id]/trades/route.ts` - Trade history
-- `[id]/analytics/route.ts` - Portfolio analytics
-
-**Watchlist APIs** (`/api/watchlist/`)
-- `route.ts` - Watchlist CRUD operations
-- `[id]/route.ts` - Individual watchlist management
-- `[id]/items/route.ts` - Watchlist item management
-- `symbols/[symbol]/route.ts` - Symbol-specific operations
-
-**Price Alert APIs** (`/api/price-alerts/`)
-- `route.ts` - Alert CRUD operations
-- `[id]/route.ts` - Individual alert management
-- `[id]/history/route.ts` - Alert history
-- `check/route.ts` - Alert checking service
-- `prices/route.ts` - Price monitoring
-- `scheduler/route.ts` - Alert scheduling service
-
-**AI APIs** (`/api/ai/`, `/api/ml-*/`)
-- `analysis/route.ts` - AI market analysis
-- `chat/route.ts` - AI chat interface
-- `file-analysis/route.ts` - Document analysis
-- `stream/route.ts` - Streaming AI responses
-- `predictions/route.ts` - AI predictions
-- `ml-predictions/route.ts` - ML model predictions
-- `enhanced-predictions/route.ts` - Enhanced predictions
-- `strategy-builder/route.ts` - Strategy building
-
-**News APIs** (`/api/news/`)
-- `route.ts` - News feed management
-- `earnings/route.ts` - Earnings announcements
-- `sentiment/[symbol]/route.ts` - Sentiment analysis
-
-**Chart APIs** (`/api/chart/`, `/api/chartimg/`)
-- `[symbol]/route.ts` - Chart data generation
-- `data/[symbol]/route.ts` - Historical chart data
-- `[symbol]/route.ts` - Chart image generation
-
-**User APIs** (`/api/user/`)
-- `preferences/route.ts` - User preferences management
-- `migrate/route.ts` - User data migration
-
-**Telemetry APIs** (`/api/telemetry/`)
-- `route.ts` - Event tracking and analytics
-
-**5. Data Flow Architecture**
-
-```mermaid
-graph TD
-    subgraph "Client-Side Data Flow"
-        USER_ACTION[User Action] --> COMPONENT[React Component]
-        COMPONENT --> ZUSTAND_STORE[Zustand Store]
-        ZUSTAND_STORE --> API_CALL[API Call]
-        API_CALL --> RESPONSE[API Response]
-        RESPONSE --> STORE_UPDATE[Store Update]
-        STORE_UPDATE --> UI_UPDATE[UI Update]
-    end
-    
-    subgraph "Server-Side Data Flow"
-        API_REQUEST[API Request] --> MIDDLEWARE[Middleware]
-        MIDDLEWARE --> AUTH_CHECK[Authentication Check]
-        AUTH_CHECK --> SERVICE_LAYER[Service Layer]
-        SERVICE_LAYER --> DATA_SOURCE[Data Source]
-        DATA_SOURCE --> VALIDATION[Data Validation]
-        VALIDATION --> DATABASE[Database]
-        DATABASE --> RESPONSE_GEN[Response Generation]
-        RESPONSE_GEN --> CLIENT[Client Response]
-    end
-    
-    subgraph "Real-time Data Flow"
-        WEBSOCKET[WebSocket Connection] --> POLYGON[Polygon.io]
-        POLYGON --> DATA_STREAM[Data Stream]
-        DATA_STREAM --> VALIDATION[Data Validation]
-        VALIDATION --> CACHE[Cache Layer]
-        CACHE --> STORE_UPDATE[Store Update]
-        STORE_UPDATE --> UI_UPDATE[UI Update]
-    end
-```
-
----
-
-## Technology Stack
-
-### Frontend Technologies
-- **Framework**: Next.js 14 with App Router
-- **Language**: TypeScript 5.3.3
-- **Styling**: Tailwind CSS 3.3.6
-- **UI Components**: shadcn/ui with Radix UI primitives
-- **State Management**: Zustand 4.4.7
-- **Data Fetching**: TanStack React Query 5.60.5
-- **Charts**: Recharts 2.15.4, Visx 3.12.0, Lightweight Charts 4.2.3
-- **Animations**: Framer Motion 10.16.16
-- **Icons**: Lucide React 0.303.0
-
-### Backend Technologies
-- **Runtime**: Node.js 18+
-- **Framework**: Next.js API Routes
-- **Database**: PostgreSQL with Prisma ORM 6.15.0
-- **Authentication**: NextAuth.js 4.24.7
-- **Real-time**: WebSocket connections
-- **File Processing**: PDF-parse, Mammoth, Tesseract.js
-- **Email**: SendGrid 8.1.5
-- **SMS**: Twilio 5.8.0
-
-### AI/ML Technologies
-- **ML Framework**: Qlib (Microsoft's quantitative investment platform)
-- **AI Services**: OpenAI GPT-4/5
-- **Data Processing**: Pandas, NumPy
-- **Backtesting**: Custom Python engines
-- **Computer Vision**: Azure Cognitive Services, Google Cloud Vision
-
-### Infrastructure
-- **Hosting**: Render.com
-- **Database**: PostgreSQL (Render managed)
-- **CDN**: Cloudflare
-- **Monitoring**: Custom telemetry system
-- **Deployment**: Git-based CI/CD
-
----
-
-## Database Architecture
-
-### Database Schema Overview
-
-```mermaid
-erDiagram
-    User ||--o{ Portfolio : owns
-    User ||--o{ Watchlist : creates
-    User ||--o{ PaperTradingAccount : has
-    User ||--o{ PriceAlert : sets
-    User ||--o{ ChatSession : participates
-    User ||--o{ TelemetryEvent : generates
-    User ||--o{ SecurityEvent : triggers
-    
-    Portfolio ||--o{ Position : contains
-    Portfolio ||--o{ Trade : records
-    
-    Watchlist ||--o{ WatchlistItem : includes
-    
-    PaperTradingAccount ||--o{ PaperPosition : holds
-    PaperTradingAccount ||--o{ PaperOrder : places
-    PaperTradingAccount ||--o{ PaperTransaction : executes
-    
-    PriceAlert ||--o{ PriceAlertHistory : tracks
-    
-    ChatSession ||--o{ ChatMessage : contains
-    
-    User {
-        string id PK
-        string email UK
-        string password
-        string firstName
-        string lastName
-        boolean isEmailVerified
-        boolean isAccountLocked
-        boolean isAccountDisabled
-        datetime lastLoginAt
-        int failedLoginAttempts
-        datetime lockoutUntil
-        string settings
-        string preferences
-        string passwordResetToken
-        datetime passwordResetExpires
-        boolean privacyPolicyAccepted
-        datetime privacyPolicyAcceptedAt
-        datetime createdAt
-        datetime updatedAt
-    }
-    
-    Portfolio {
-        string id PK
-        string userId FK
-        string name
-        datetime createdAt
-        datetime updatedAt
-    }
-    
-    Position {
-        string id PK
-        string portfolioId FK
-        string symbol
-        float quantity
-        float averagePrice
-        datetime entryDate
-        string notes
-    }
-    
-    Watchlist {
-        string id PK
-        string userId FK
-        string name
-        datetime createdAt
-        datetime updatedAt
-    }
-    
-    WatchlistItem {
-        string id PK
-        string watchlistId FK
-        string symbol
-        string name
-        string type
-        float price
-        float change
-        float changePercent
-        string exchange
-        string sector
-        string industry
-        float volume
-        float marketCap
-        datetime lastUpdated
-        datetime addedAt
-    }
-    
-    PaperTradingAccount {
-        string id PK
-        string userId FK
-        string name
-        float initialBalance
-        float currentBalance
-        float availableCash
-        float totalValue
-        float totalPnL
-        float totalPnLPercent
-        boolean isActive
-        datetime createdAt
-        datetime updatedAt
-    }
-    
-    PaperPosition {
-        string id PK
-        string accountId FK
-        string symbol
-        string name
-        float quantity
-        float averagePrice
-        float currentPrice
-        float marketValue
-        float unrealizedPnL
-        float unrealizedPnLPercent
-        string type
-        string exchange
-        string sector
-        string notes
-        datetime entryDate
-        datetime lastUpdated
-    }
-    
-    PriceAlert {
-        string id PK
-        string userId FK
-        string symbol
-        float targetPrice
-        string condition
-        string userEmail
-        string status
-        boolean isActive
-        datetime createdAt
-        datetime updatedAt
-        datetime triggeredAt
-        datetime lastChecked
-    }
-    
-    ChatSession {
-        string id PK
-        string userId FK
-        string title
-        datetime createdAt
-        datetime updatedAt
-    }
-    
-    ChatMessage {
-        string id PK
-        string sessionId FK
-        string role
-        string content
-        string metadata
-        datetime timestamp
-    }
-    
-    TelemetryEvent {
-        string id PK
-        string sessionId
-        string userId FK
-        string event
-        string category
-        datetime timestamp
-        string properties
-        string metadata
-        string severity
-        float value
-        string unit
-        datetime createdAt
-    }
-```
-
-### Database Features
-- **ACID Compliance**: Full transactional support
-- **Indexing**: Optimized indexes for performance
-- **Foreign Keys**: Referential integrity
-- **Audit Trail**: Comprehensive logging
-- **Security**: Row-level security policies
-- **Backup**: Automated daily backups
-
----
-
-## API Architecture
-
-### API Endpoint Structure
-
-```mermaid
-graph TB
-    subgraph "Authentication APIs"
-        AUTH_LOGIN[POST /api/auth/login]
-        AUTH_REGISTER[POST /api/auth/register]
-        AUTH_REFRESH[POST /api/auth/refresh]
-        AUTH_LOGOUT[POST /api/auth/logout]
-        AUTH_VERIFY[POST /api/auth/verify]
-    end
-    
-    subgraph "Market Data APIs"
-        MARKET_DATA[GET /api/market-data]
-        STOCK_QUOTE[GET /api/quote]
-        TOP_MOVERS[GET /api/top-movers]
-        MARKET_STATUS[GET /api/market-status]
-    end
-    
-    subgraph "Trading APIs"
-        PAPER_TRADING[POST /api/paper-trading]
-        PORTFOLIO[GET /api/portfolio]
-        WATCHLIST[GET /api/watchlist]
-        PRICE_ALERTS[GET /api/price-alerts]
-    end
-    
-    subgraph "AI/ML APIs"
-        AI_PREDICTIONS[POST /api/ai-predictions]
-        ML_PREDICTIONS[POST /api/ml-predictions]
-        ENHANCED_PREDICTIONS[POST /api/enhanced-predictions]
-        AI_ANALYSIS[POST /api/ai-analysis]
-    end
-    
-    subgraph "Backtesting APIs"
-        QLIB[POST /api/qlib]
-        BACKTEST[POST /api/qlib-backtesting]
-        STRATEGY_BUILDER[POST /api/strategy-builder]
-    end
-    
-    subgraph "Chart APIs"
-        CHART_DATA[GET /api/chart-data]
-        CHARTIMG[GET /api/chartimg]
-    end
-    
-    subgraph "News APIs"
-        NEWS[GET /api/news]
-        MARKET_INSIGHTS[GET /api/market-insights]
-    end
-```
-
-### API Response Format
-```typescript
-interface APIResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-  timestamp: string;
-  requestId: string;
-}
-```
-
-### Rate Limiting & Security
-- **Rate Limiting**: 100 requests/minute per user
-- **Authentication**: JWT tokens with refresh mechanism
-- **CORS**: Configured for production domains
-- **Input Validation**: Comprehensive request validation
-- **SQL Injection Protection**: Parameterized queries
-- **XSS Protection**: Input sanitization
-
----
-
-## Frontend Architecture
-
-### Component Hierarchy
-
-```mermaid
-graph TB
-    subgraph "App Structure"
-        ROOT[Root Layout]
-        AUTH_GUARD[Auth Guard]
-        MAIN_LAYOUT[Main Layout]
-    end
-    
-    subgraph "Layout Components"
-        HEADER[Header]
-        SIDEBAR[Sidebar]
-        FOOTER[Footer]
-    end
-    
-    subgraph "Feature Components"
-        DASHBOARD[Dashboard]
-        CHARTS[Charts]
-        TRADING[Trading]
-        PORTFOLIO[Portfolio]
-        WATCHLIST[Watchlist]
-        NEWS[News]
-        AI_CHAT[AI Chat]
-    end
-    
-    subgraph "UI Components"
-        BUTTONS[Buttons]
-        FORMS[Forms]
-        MODALS[Modals]
-        TABLES[Tables]
-        CARDS[Cards]
-    end
-    
-    ROOT --> AUTH_GUARD
-    AUTH_GUARD --> MAIN_LAYOUT
-    MAIN_LAYOUT --> HEADER
-    MAIN_LAYOUT --> SIDEBAR
-    MAIN_LAYOUT --> FOOTER
-    
-    MAIN_LAYOUT --> DASHBOARD
-    MAIN_LAYOUT --> CHARTS
-    MAIN_LAYOUT --> TRADING
-    MAIN_LAYOUT --> PORTFOLIO
-    MAIN_LAYOUT --> WATCHLIST
-    MAIN_LAYOUT --> NEWS
-    MAIN_LAYOUT --> AI_CHAT
-    
-    DASHBOARD --> BUTTONS
-    CHARTS --> CARDS
-    TRADING --> FORMS
-    PORTFOLIO --> TABLES
-    WATCHLIST --> MODALS
-```
-
-### State Management Architecture
-
-```mermaid
-graph LR
-    subgraph "Zustand Stores"
-        UI_STORE[UI Store]
-        AUTH_STORE[Auth Store]
-        WATCHLIST_STORE[Watchlist Store]
-        PORTFOLIO_STORE[Portfolio Store]
-        PRICE_ALERT_STORE[Price Alert Store]
-        NEWS_STORE[News Store]
-    end
-    
-    subgraph "React Query Cache"
-        MARKET_DATA[Market Data]
-        STOCK_DATA[Stock Data]
-        PORTFOLIO_DATA[Portfolio Data]
-        NEWS_DATA[News Data]
-    end
-    
-    subgraph "Local Storage"
-        USER_PREFS[User Preferences]
-        THEME[Theme Settings]
-        CACHE[Cache Data]
-    end
-    
-    UI_STORE --> USER_PREFS
-    AUTH_STORE --> CACHE
-    WATCHLIST_STORE --> MARKET_DATA
-    PORTFOLIO_STORE --> PORTFOLIO_DATA
-    PRICE_ALERT_STORE --> STOCK_DATA
-    NEWS_STORE --> NEWS_DATA
-```
-
-### Routing Structure
-```
-/ (Landing Page)
-├── /login (Authentication)
-├── /register (User Registration)
-├── /dashboard (Main Dashboard)
-├── /watchlist (Stock Watchlists)
-├── /portfolio-manager (Portfolio Management)
-├── /paper-trading (Paper Trading)
-├── /price-alerts (Price Alerts)
-├── /treadgpt (AI Chat Assistant)
-├── /market-view (Market Overview)
-├── /top-movers (Top Gainers/Losers)
-├── /screener (Stock Screener)
-├── /news (Market News)
-├── /chart/[symbol] (Stock Charts)
-├── /qlib (Qlib Backtesting)
-├── /strategy-builder (Strategy Builder)
-└── /settings (User Settings)
-```
-
----
-
-## Authentication & Security
-
-### Authentication Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant A as Auth API
-    participant D as Database
-    participant E as External Auth
-    
-    U->>F: Login Request
-    F->>A: POST /api/auth/login
-    A->>D: Validate Credentials
-    D-->>A: User Data
-    A->>A: Generate JWT
-    A->>D: Store Session
-    A-->>F: Access Token + Refresh Token
-    F->>F: Store in localStorage
-    F-->>U: Redirect to Dashboard
-    
-    Note over F: Subsequent Requests
-    F->>A: API Request with JWT
-    A->>A: Validate JWT
-    A-->>F: Protected Data
-    
-    Note over F: Token Refresh
-    F->>A: POST /api/auth/refresh
-    A->>A: Validate Refresh Token
-    A-->>F: New Access Token
-```
-
-### Security Features
-- **Multi-Factor Authentication**: TOTP support
-- **Account Lockout**: After failed login attempts
-- **Session Management**: Secure session handling
-- **Password Security**: Bcrypt hashing
-- **Rate Limiting**: API endpoint protection
-- **CORS Configuration**: Cross-origin security
-- **Content Security Policy**: XSS protection
-- **Input Validation**: Comprehensive sanitization
-- **SQL Injection Protection**: Parameterized queries
-
-### Security Headers
-```javascript
-// Security headers configuration
-{
-  'X-Frame-Options': 'DENY',
-  'X-Content-Type-Options': 'nosniff',
-  'X-XSS-Protection': '1; mode=block',
-  'Strict-Transport-Security': 'max-age=31536000',
-  'Content-Security-Policy': "default-src 'self'",
-  'Referrer-Policy': 'strict-origin-when-cross-origin'
-}
-```
-
----
-
-## Real-time Data System
-
-### Data Flow Architecture
-
-```mermaid
-graph TB
-    subgraph "Data Sources"
-        POLYGON[Polygon.io]
-        YAHOO[Yahoo Finance]
-        ALPHA[Alpha Vantage]
-    end
-    
-    subgraph "Data Processing"
-        MULTI_SRC[Multi-Source API]
-        VALIDATION[Data Validation]
-        CACHE[Redis Cache]
-    end
-    
-    subgraph "Real-time System"
-        WS[WebSocket Server]
-        POLLING[REST Polling]
-        EVENTS[Event System]
-    end
-    
-    subgraph "Client Updates"
-        STORES[Zustand Stores]
-        COMPONENTS[React Components]
-        UI[User Interface]
-    end
-    
-    POLYGON --> MULTI_SRC
-    YAHOO --> MULTI_SRC
-    ALPHA --> MULTI_SRC
-    
-    MULTI_SRC --> VALIDATION
-    VALIDATION --> CACHE
-    CACHE --> WS
-    CACHE --> POLLING
-    
-    WS --> EVENTS
-    POLLING --> EVENTS
-    EVENTS --> STORES
-    STORES --> COMPONENTS
-    COMPONENTS --> UI
-```
-
-### WebSocket Implementation
-```typescript
-// WebSocket connection management
-class RealTimeDataSystem {
-  private ws: WebSocket | null = null;
-  private subscriptions = new Map<string, DataSubscription>();
-  
-  connect() {
-    this.ws = new WebSocket('wss://socket.polygon.io/stocks');
-    this.ws.onmessage = this.handleMessage.bind(this);
-  }
-  
-  subscribe(symbols: string[]) {
-    symbols.forEach(symbol => {
-      this.ws?.send(JSON.stringify({
-        action: 'subscribe',
-        params: `T.${symbol},AM.${symbol}`
-      }));
-    });
-  }
-  
-  handleMessage(event: MessageEvent) {
-    const data = JSON.parse(event.data);
-    this.updateStores(data);
-  }
-}
-```
-
-### Data Validation System
-- **Price Validation**: Range and format checks
-- **Volume Validation**: Positive number validation
-- **Sector Validation**: Standardized sector mapping
-- **Market Cap Validation**: Reasonable range checks
-- **Quality Scoring**: Data quality assessment
-
----
-
-## AI & Machine Learning
-
-### AI Architecture
-
-```mermaid
-graph TB
-    subgraph "AI Services"
-        OPENAI[OpenAI GPT-4/5]
-        CHARTIMG[ChartImg API]
-        GOOGLE[Google Vision API]
-        AZURE[Azure Cognitive Services]
-    end
-    
-    subgraph "ML Pipeline"
-        DATA_PREP[Data Preparation]
-        FEATURE_ENG[Feature Engineering]
-        MODEL_TRAIN[Model Training]
-        PREDICTION[Prediction Engine]
-    end
-    
-    subgraph "Qlib Integration"
-        QLIB_DATA[Qlib Data Manager]
-        QLIB_MODELS[Qlib Models]
-        QLIB_BACKTEST[Qlib Backtesting]
-    end
-    
-    subgraph "Prediction Models"
-        TRANSFORMER[Transformer Model]
-        LSTM[LSTM Model]
-        CNN_LSTM[CNN-LSTM Hybrid]
-        ENSEMBLE[Ensemble Model]
-    end
-    
-    OPENAI --> DATA_PREP
-    CHARTIMG --> FEATURE_ENG
-    GOOGLE --> FEATURE_ENG
-    AZURE --> FEATURE_ENG
-    
-    DATA_PREP --> MODEL_TRAIN
-    FEATURE_ENG --> MODEL_TRAIN
-    MODEL_TRAIN --> PREDICTION
-    
-    QLIB_DATA --> QLIB_MODELS
-    QLIB_MODELS --> QLIB_BACKTEST
-    
-    PREDICTION --> TRANSFORMER
-    PREDICTION --> LSTM
-    PREDICTION --> CNN_LSTM
-    PREDICTION --> ENSEMBLE
-```
-
-### Machine Learning Models
-
-#### 1. Transformer Model
-- **Architecture**: Multi-head attention mechanism
-- **Input**: 60-day price sequences with technical indicators
-- **Output**: Price predictions with confidence intervals
-- **Features**: Volume, RSI, MACD, Bollinger Bands
-
-#### 2. LSTM Model
-- **Architecture**: Long Short-Term Memory networks
-- **Input**: Historical price data with market sentiment
-- **Output**: Trend direction and magnitude
-- **Features**: Price, volume, volatility, news sentiment
-
-#### 3. CNN-LSTM Hybrid
-- **Architecture**: Convolutional + LSTM layers
-- **Input**: Chart images and time series data
-- **Output**: Pattern recognition and price targets
-- **Features**: Visual patterns, technical indicators
-
-#### 4. Ensemble Model
-- **Architecture**: Multiple model combination
-- **Input**: Predictions from all models
-- **Output**: Weighted consensus prediction
-- **Features**: Model confidence, historical performance
-
-### AI Features
-- **TradeGPT Assistant**: Conversational AI for trading advice
-- **Pattern Recognition**: Automatic chart pattern detection
-- **Sentiment Analysis**: News and social media sentiment
-- **Risk Assessment**: AI-powered risk evaluation
-- **Strategy Generation**: Automated strategy creation
-
----
-
-## Backtesting Engine
-
-### Backtesting Architecture
-
-```mermaid
-graph TB
-    subgraph "Data Sources"
-        HISTORICAL[Historical Data]
-        POLYGON_BT[Polygon.io Data]
-        QLIB_DATA[Qlib Data]
-    end
-    
-    subgraph "Strategy Engine"
-        MOMENTUM[Momentum Strategy]
-        MEAN_REV[Mean Reversion]
-        ML_STRATEGY[ML Strategy]
-        CUSTOM[Custom Strategies]
-    end
-    
-    subgraph "Execution Engine"
-        ORDER_MGMT[Order Management]
-        RISK_MGMT[Risk Management]
-        SLIPPAGE[Slippage Model]
-        COMMISSION[Commission Model]
-    end
-    
-    subgraph "Analysis Engine"
-        PERFORMANCE[Performance Analytics]
-        RISK_ANALYSIS[Risk Analysis]
-        WALK_FORWARD[Walk-Forward Analysis]
-        MONTE_CARLO[Monte Carlo Simulation]
-    end
-    
-    subgraph "Reporting"
-        CHARTS[Performance Charts]
-        METRICS[Risk Metrics]
-        REPORTS[Detailed Reports]
-    end
-    
-    HISTORICAL --> MOMENTUM
-    POLYGON_BT --> MEAN_REV
-    QLIB_DATA --> ML_STRATEGY
-    
-    MOMENTUM --> ORDER_MGMT
-    MEAN_REV --> RISK_MGMT
-    ML_STRATEGY --> SLIPPAGE
-    CUSTOM --> COMMISSION
-    
-    ORDER_MGMT --> PERFORMANCE
-    RISK_MGMT --> RISK_ANALYSIS
-    SLIPPAGE --> WALK_FORWARD
-    COMMISSION --> MONTE_CARLO
-    
-    PERFORMANCE --> CHARTS
-    RISK_ANALYSIS --> METRICS
-    WALK_FORWARD --> REPORTS
-    MONTE_CARLO --> REPORTS
-```
-
-### Strategy Types
-
-#### 1. Momentum Strategy
-```python
-class MomentumStrategy:
-    def __init__(self, lookback_period=20, threshold=0.02):
-        self.lookback_period = lookback_period
-        self.threshold = threshold
-    
-    def calculate_signals(self, data):
-        # Calculate momentum
-        momentum = data['Close'].pct_change(self.lookback_period)
-        
-        # Generate signals
-        signals = pd.Series(0, index=data.index)
-        signals[momentum > self.threshold] = 1  # Buy
-        signals[momentum < -self.threshold] = -1  # Sell
-        
-        return signals
-```
-
-#### 2. Mean Reversion Strategy
-```python
-class MeanReversionStrategy:
-    def __init__(self, rsi_period=14, oversold=30, overbought=70):
-        self.rsi_period = rsi_period
-        self.oversold = oversold
-        self.overbought = overbought
-    
-    def calculate_signals(self, data):
-        # Calculate RSI
-        rsi = self.calculate_rsi(data['Close'], self.rsi_period)
-        
-        # Generate signals
-        signals = pd.Series(0, index=data.index)
-        signals[rsi < self.oversold] = 1  # Buy oversold
-        signals[rsi > self.overbought] = -1  # Sell overbought
-        
-        return signals
-```
-
-### Performance Metrics
-- **Return Metrics**: Total return, annualized return, CAGR
-- **Risk Metrics**: Sharpe ratio, Sortino ratio, maximum drawdown
-- **Trade Metrics**: Win rate, profit factor, average trade duration
-- **Risk-Adjusted**: Calmar ratio, Sterling ratio, Burke ratio
-
----
-
-## Deployment & Infrastructure
-
-### Deployment Architecture
-
-```mermaid
-graph TB
-    subgraph "Development"
-        DEV[Local Development]
-        GIT[Git Repository]
-    end
-    
-    subgraph "CI/CD Pipeline"
-        BUILD[Build Process]
-        TEST[Automated Tests]
-        DEPLOY[Deployment]
-    end
-    
-    subgraph "Production Environment"
-        RENDER[Render.com]
-        DB[PostgreSQL Database]
-        CDN[Cloudflare CDN]
-    end
-    
-    subgraph "Monitoring"
-        LOGS[Application Logs]
-        METRICS[Performance Metrics]
-        ALERTS[Alert System]
-    end
-    
-    DEV --> GIT
-    GIT --> BUILD
-    BUILD --> TEST
-    TEST --> DEPLOY
-    DEPLOY --> RENDER
-    RENDER --> DB
-    RENDER --> CDN
-    
-    RENDER --> LOGS
-    RENDER --> METRICS
-    LOGS --> ALERTS
-    METRICS --> ALERTS
+## Test Environment Setup
+
+### Prerequisites
+```bash
+# Required Software Versions
+Node.js: >= 18.0.0
+npm: >= 8.0.0
+Python: >= 3.9.0
+PostgreSQL: >= 13.0
+Git: Latest version
 ```
 
 ### Environment Configuration
 
-#### Development Environment
+#### 1. Clone Repository
 ```bash
-# .env.local
-NODE_ENV=development
-DATABASE_URL=postgresql://localhost:5432/vidality_dev
-POLYGON_API_KEY=your_dev_key
-OPENAI_API_KEY=your_dev_key
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
+git clone https://github.com/vidality/trading-platform.git
+cd trading-platform
 ```
 
-#### Production Environment
+#### 2. Install Dependencies
 ```bash
-# Render Environment Variables
-NODE_ENV=production
-DATABASE_URL=postgresql://render_db_url
-POLYGON_API_KEY=your_prod_key
-OPENAI_API_KEY=your_prod_key
-NEXT_PUBLIC_BASE_URL=https://vidality.com
-```
+# Install Node.js dependencies
+npm install
 
-### Build Process
-```bash
-# Build command
-npm run build
+# Install Python dependencies for ML features
+bash scripts/install-python-deps.sh
 
-# Steps:
-1. Install dependencies
-2. Install Python dependencies
-3. Generate Prisma client
-4. Build Next.js application
-5. Optimize assets
-6. Deploy to Render
-```
-
-### Database Migrations
-```bash
-# Migration process
-npx prisma migrate deploy
-npx prisma db push
+# Generate Prisma client
 npx prisma generate
 ```
 
----
+#### 3. Environment Variables Setup
+Create `.env.test` file with the following variables:
 
-## Development Workflow
+```env
+# Database Configuration
+DATABASE_URL="postgresql://test_user:test_password@localhost:5432/vidality_test"
+TEST_DATABASE_URL="postgresql://test_user:test_password@localhost:5432/vidality_test"
 
-### Git Workflow
-```mermaid
-graph LR
-    subgraph "Feature Development"
-        FEATURE[Feature Branch]
-        DEV[Development]
-        TEST[Testing]
-    end
-    
-    subgraph "Code Review"
-        PR[Pull Request]
-        REVIEW[Code Review]
-        APPROVE[Approval]
-    end
-    
-    subgraph "Deployment"
-        MAIN[Main Branch]
-        STAGING[Staging]
-        PROD[Production]
-    end
-    
-    FEATURE --> DEV
-    DEV --> TEST
-    TEST --> PR
-    PR --> REVIEW
-    REVIEW --> APPROVE
-    APPROVE --> MAIN
-    MAIN --> STAGING
-    STAGING --> PROD
+# API Keys (Use test/sandbox keys only)
+POLYGON_API_KEY="test_polygon_key"
+OPENAI_API_KEY="test_openai_key"
+CHARTIMG_API_KEY="test_chartimg_key"
+GOOGLE_SEARCH_API_KEY="test_google_key"
+
+# Application Configuration
+NODE_ENV="test"
+NEXT_PUBLIC_BASE_URL="http://localhost:3000"
+NEXTAUTH_SECRET="test_nextauth_secret"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Email Configuration (Test)
+SENDGRID_API_KEY="test_sendgrid_key"
+TWILIO_ACCOUNT_SID="test_twilio_sid"
+TWILIO_AUTH_TOKEN="test_twilio_token"
+
+# Security Configuration
+JWT_SECRET="test_jwt_secret"
+ENCRYPTION_KEY="test_encryption_key"
+
+# Feature Flags
+ENABLE_AI_FEATURES="true"
+ENABLE_PAPER_TRADING="true"
+ENABLE_REAL_TIME_DATA="true"
 ```
 
-### Development Commands
+#### 4. Database Setup
 ```bash
-# Development
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run start        # Start production server
-npm run lint         # Run ESLint
-npm run type-check   # Run TypeScript checks
+# Create test database
+createdb vidality_test
 
-# Database
-npm run prisma:generate    # Generate Prisma client
-npm run prisma:migrate:deploy  # Deploy migrations
+# Run migrations
+npx prisma migrate deploy
 
-# Python (for ML features)
+# Seed test data
+npx prisma db seed
+```
+
+#### 5. Start Test Environment
+```bash
+# Start development server
+npm run dev
+
+# In separate terminal, start test database
+npm run test:db:start
+```
+
+### Test Environment Architecture
+
+```mermaid
+graph TB
+    subgraph "Test Environment"
+        TEST_APP[Test Application - localhost:3000]
+        TEST_DB[(Test Database - PostgreSQL)]
+        MOCK_APIS[Mock External APIs]
+        TEST_TOOLS[Testing Tools - Jest, Cypress, etc.]
+    end
+    
+    subgraph "External Services (Mocked)"
+        MOCK_POLYGON[Mock Polygon.io API]
+        MOCK_OPENAI[Mock OpenAI API]
+        MOCK_SENDGRID[Mock SendGrid API]
+    end
+    
+    TEST_APP --> TEST_DB
+    TEST_APP --> MOCK_APIS
+    TEST_TOOLS --> TEST_APP
+    MOCK_APIS --> MOCK_POLYGON
+    MOCK_APIS --> MOCK_OPENAI
+    MOCK_APIS --> MOCK_SENDGRID
+```
+
+---
+
+## Running Tests
+
+### Test Commands
+
+#### Unit Tests
+```bash
+# Run all unit tests
+npm run test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run specific test file
+npm run test -- --testPathPattern=auth.test.ts
+
+# Run tests for specific component
+npm run test -- --testPathPattern=Dashboard
+```
+
+#### Integration Tests
+```bash
+# Run API integration tests
+npm run test:integration
+
+# Run database integration tests
+npm run test:db
+
+# Run external API integration tests
+npm run test:api
+```
+
+#### End-to-End Tests
+```bash
+# Run E2E tests (requires app to be running)
+npm run test:e2e
+
+# Run E2E tests in headless mode
+npm run test:e2e:headless
+
+# Run specific E2E test suite
+npm run test:e2e -- --spec="cypress/e2e/auth.cy.ts"
+```
+
+#### Performance Tests
+```bash
+# Run load tests
+npm run test:load
+
+# Run stress tests
+npm run test:stress
+
+# Run performance benchmarks
+npm run test:performance
+```
+
+### Test Execution Flow
+
+```mermaid
+graph TD
+    START[Start Testing] --> UNIT[Unit Tests]
+    UNIT --> UNIT_PASS{Unit Tests Pass?}
+    UNIT_PASS -->|No| FIX_UNIT[Fix Unit Test Issues]
+    FIX_UNIT --> UNIT
+    UNIT_PASS -->|Yes| INTEGRATION[Integration Tests]
+    
+    INTEGRATION --> INT_PASS{Integration Tests Pass?}
+    INT_PASS -->|No| FIX_INT[Fix Integration Issues]
+    FIX_INT --> INTEGRATION
+    INT_PASS -->|Yes| E2E[End-to-End Tests]
+    
+    E2E --> E2E_PASS{E2E Tests Pass?}
+    E2E_PASS -->|No| FIX_E2E[Fix E2E Issues]
+    FIX_E2E --> E2E
+    E2E_PASS -->|Yes| PERFORMANCE[Performance Tests]
+    
+    PERFORMANCE --> PERF_PASS{Performance Tests Pass?}
+    PERF_PASS -->|No| OPTIMIZE[Optimize Performance]
+    OPTIMIZE --> PERFORMANCE
+    PERF_PASS -->|Yes| SECURITY[Security Tests]
+    
+    SECURITY --> SEC_PASS{Security Tests Pass?}
+    SEC_PASS -->|No| FIX_SEC[Fix Security Issues]
+    FIX_SEC --> SECURITY
+    SEC_PASS -->|Yes| COMPLETE[Testing Complete]
+```
+
+---
+
+## Feature Testing Guide
+
+### 1. Authentication System
+
+#### Test Scenarios
+- **User Registration**: Email validation, password strength, account creation
+- **User Login**: Credential validation, session management, token generation
+- **OAuth Integration**: Google OAuth flow, account linking, token refresh
+- **Password Reset**: Email verification, secure token generation, password update
+- **Account Security**: Failed login attempts, account lockout, security events
+
+#### Test Data Requirements
+```typescript
+// Test user accounts
+const testUsers = {
+  validUser: {
+    email: "test@vidality.com",
+    password: "TestPassword123!",
+    firstName: "Test",
+    lastName: "User"
+  },
+  invalidUser: {
+    email: "invalid-email",
+    password: "weak",
+    firstName: "",
+    lastName: ""
+  }
+}
+```
+
+### 2. Real-time Market Data
+
+#### Test Scenarios
+- **Data Fetching**: Stock quotes, market status, historical data
+- **WebSocket Connection**: Real-time updates, connection stability, reconnection
+- **Data Validation**: Price accuracy, volume validation, timestamp verification
+- **Fallback Mechanisms**: API failure handling, data source switching
+- **Caching**: Cache hit/miss, TTL validation, cache invalidation
+
+#### Test Data Requirements
+```typescript
+// Test stock symbols
+const testSymbols = [
+  "AAPL", "MSFT", "GOOGL", "TSLA", "NVDA", // Valid symbols
+  "INVALID", "123", "", null // Invalid symbols
+]
+
+// Expected data structure
+const expectedStockData = {
+  symbol: "AAPL",
+  price: expect.any(Number),
+  change: expect.any(Number),
+  changePercent: expect.any(Number),
+  volume: expect.any(Number),
+  timestamp: expect.any(Date)
+}
+```
+
+### 3. Portfolio Management
+
+#### Test Scenarios
+- **Portfolio Creation**: Portfolio setup, naming validation, user association
+- **Position Management**: Buy/sell operations, quantity validation, price updates
+- **Performance Tracking**: P&L calculation, performance metrics, historical data
+- **Portfolio Analytics**: Risk metrics, allocation analysis, benchmark comparison
+
+#### Test Workflows
+```typescript
+// Portfolio creation workflow
+describe('Portfolio Management', () => {
+  it('should create portfolio successfully', async () => {
+    // 1. Login as test user
+    await login(testUsers.validUser)
+    
+    // 2. Navigate to portfolio section
+    await navigateToPortfolio()
+    
+    // 3. Create new portfolio
+    await createPortfolio('Test Portfolio')
+    
+    // 4. Verify portfolio creation
+    expect(await getPortfolioCount()).toBe(1)
+    expect(await getPortfolioName()).toBe('Test Portfolio')
+  })
+})
+```
+
+### 4. Paper Trading System
+
+#### Test Scenarios
+- **Account Setup**: Virtual account creation, initial balance, account validation
+- **Order Execution**: Buy/sell orders, order validation, execution simulation
+- **Position Tracking**: Position updates, P&L calculation, position history
+- **Order Management**: Order modification, cancellation, order history
+
+#### Test Data Requirements
+```typescript
+// Paper trading test data
+const paperTradingData = {
+  initialBalance: 100000,
+  testOrders: [
+    { symbol: "AAPL", quantity: 100, type: "buy", price: 150.00 },
+    { symbol: "MSFT", quantity: 50, type: "sell", price: 300.00 }
+  ]
+}
+```
+
+### 5. AI-Powered Features
+
+#### Test Scenarios
+- **AI Predictions**: Prediction accuracy, confidence scores, model validation
+- **Chat Interface**: Message handling, context preservation, response quality
+- **Document Analysis**: File upload, analysis accuracy, result presentation
+- **Sentiment Analysis**: News sentiment, market sentiment, accuracy validation
+
+#### Test Data Requirements
+```typescript
+// AI testing data
+const aiTestData = {
+  chatMessages: [
+    "What is the current market sentiment for AAPL?",
+    "Analyze this earnings report",
+    "Generate a trading strategy for tech stocks"
+  ],
+  testDocuments: [
+    "earnings_report.pdf",
+    "market_analysis.docx",
+    "trading_strategy.txt"
+  ]
+}
+```
+
+---
+
+## Test Cases & Acceptance Criteria
+
+### Authentication Test Cases
+
+| Test Case ID | Description | Steps | Expected Result | Priority |
+|--------------|-------------|-------|-----------------|----------|
+| AUTH-001 | Valid User Registration | 1. Navigate to register page<br>2. Enter valid user data<br>3. Submit form | User account created, verification email sent | High |
+| AUTH-002 | Invalid Email Registration | 1. Enter invalid email format<br>2. Submit form | Error message displayed, account not created | High |
+| AUTH-003 | Weak Password Registration | 1. Enter weak password<br>2. Submit form | Password strength error displayed | Medium |
+| AUTH-004 | Valid User Login | 1. Enter valid credentials<br>2. Submit login form | User logged in, redirected to dashboard | High |
+| AUTH-005 | Invalid Credentials Login | 1. Enter invalid credentials<br>2. Submit form | Error message displayed, login failed | High |
+| AUTH-006 | Google OAuth Login | 1. Click Google login<br>2. Complete OAuth flow | User logged in via Google, account linked | Medium |
+| AUTH-007 | Password Reset Flow | 1. Click forgot password<br>2. Enter email<br>3. Check email<br>4. Reset password | Password reset email sent, password updated | Medium |
+| AUTH-008 | Account Lockout | 1. Attempt login with wrong password 5 times | Account locked, security alert sent | High |
+
+### Market Data Test Cases
+
+| Test Case ID | Description | Steps | Expected Result | Priority |
+|--------------|-------------|-------|-----------------|----------|
+| DATA-001 | Stock Quote Retrieval | 1. Search for valid stock symbol<br>2. View quote data | Current price, change, volume displayed | High |
+| DATA-002 | Invalid Symbol Handling | 1. Search for invalid symbol | Error message displayed, no data shown | High |
+| DATA-003 | Real-time Updates | 1. View stock quote<br>2. Wait for updates | Price updates in real-time via WebSocket | High |
+| DATA-004 | Market Status Check | 1. Check market status | Market open/closed status displayed correctly | Medium |
+| DATA-005 | Historical Data | 1. Request historical data<br>2. Select date range | Historical price data displayed in chart | Medium |
+| DATA-006 | Data Source Fallback | 1. Simulate primary API failure | Data retrieved from fallback source | High |
+| DATA-007 | Data Validation | 1. Verify price data accuracy | Prices match external sources within tolerance | High |
+| DATA-008 | Cache Performance | 1. Request same data multiple times | Subsequent requests served from cache | Low |
+
+### Portfolio Management Test Cases
+
+| Test Case ID | Description | Steps | Expected Result | Priority |
+|--------------|-------------|-------|-----------------|----------|
+| PORT-001 | Portfolio Creation | 1. Create new portfolio<br>2. Enter portfolio name | Portfolio created successfully | High |
+| PORT-002 | Position Addition | 1. Add stock position<br>2. Enter quantity and price | Position added to portfolio | High |
+| PORT-003 | P&L Calculation | 1. Add positions with different prices<br>2. View portfolio | P&L calculated correctly | High |
+| PORT-004 | Portfolio Analytics | 1. View portfolio analytics | Risk metrics, allocation charts displayed | Medium |
+| PORT-005 | Position Updates | 1. Update position quantity | Position updated, P&L recalculated | High |
+| PORT-006 | Portfolio Deletion | 1. Delete portfolio | Portfolio removed, confirmation displayed | Medium |
+| PORT-007 | Multiple Portfolios | 1. Create multiple portfolios | All portfolios displayed correctly | Low |
+| PORT-008 | Portfolio Performance | 1. View performance over time | Performance chart displayed with metrics | Medium |
+
+### Paper Trading Test Cases
+
+| Test Case ID | Description | Steps | Expected Result | Priority |
+|--------------|-------------|-------|-----------------|----------|
+| PAPER-001 | Account Setup | 1. Create paper trading account<br>2. Set initial balance | Account created with specified balance | High |
+| PAPER-002 | Buy Order Execution | 1. Place buy order<br>2. Confirm order | Order executed, position created | High |
+| PAPER-003 | Sell Order Execution | 1. Place sell order<br>2. Confirm order | Order executed, position updated | High |
+| PAPER-004 | Order Validation | 1. Place order with insufficient funds | Order rejected, error message displayed | High |
+| PAPER-005 | Order Cancellation | 1. Place order<br>2. Cancel before execution | Order cancelled, funds returned | Medium |
+| PAPER-006 | Position Tracking | 1. Execute trades<br>2. View positions | Positions displayed with current values | High |
+| PAPER-007 | Trade History | 1. Execute multiple trades<br>2. View history | All trades displayed in chronological order | Medium |
+| PAPER-008 | Account Balance | 1. Execute trades<br>2. Check balance | Balance updated correctly after trades | High |
+
+---
+
+## Known Limitations & Edge Cases
+
+### Data Limitations
+
+#### Market Data
+- **Rate Limits**: Polygon.io API has rate limits (100 requests/minute for free tier)
+- **Market Hours**: Real-time data only available during market hours
+- **Data Delays**: Some data sources may have 15-20 minute delays
+- **Symbol Coverage**: Limited to US stocks, no international markets
+
+#### AI Features
+- **Response Time**: AI predictions may take 5-10 seconds to generate
+- **Accuracy**: AI predictions are for informational purposes only
+- **Model Limitations**: Models trained on historical data, may not predict future accurately
+- **Language Support**: AI features primarily support English
+
+### Edge Cases to Test
+
+#### Authentication Edge Cases
+```typescript
+// Test scenarios for edge cases
+const authEdgeCases = [
+  {
+    scenario: "Concurrent login attempts",
+    test: "Multiple login attempts from same IP",
+    expected: "Rate limiting applied"
+  },
+  {
+    scenario: "Session expiry during activity",
+    test: "User session expires while using app",
+    expected: "Graceful redirect to login"
+  },
+  {
+    scenario: "OAuth callback failure",
+    test: "Google OAuth callback fails",
+    expected: "Error handling and fallback"
+  }
+]
+```
+
+#### Data Edge Cases
+```typescript
+const dataEdgeCases = [
+  {
+    scenario: "Network connectivity loss",
+    test: "Disconnect network during data fetch",
+    expected: "Graceful error handling, retry mechanism"
+  },
+  {
+    scenario: "Invalid data format",
+    test: "API returns malformed data",
+    expected: "Data validation, fallback to cached data"
+  },
+  {
+    scenario: "Extreme price movements",
+    test: "Stock price changes by >50%",
+    expected: "Data validation, alert generation"
+  }
+]
+```
+
+#### Trading Edge Cases
+```typescript
+const tradingEdgeCases = [
+  {
+    scenario: "Insufficient funds",
+    test: "Attempt to buy with insufficient balance",
+    expected: "Order rejection, clear error message"
+  },
+  {
+    scenario: "Market closed trading",
+    test: "Attempt to trade when market is closed",
+    expected: "Order queued for next market open"
+  },
+  {
+    scenario: "Invalid order quantities",
+    test: "Place order with negative or zero quantity",
+    expected: "Order validation, error message"
+  }
+]
+```
+
+### Risk Areas
+
+#### High-Risk Areas
+1. **Financial Calculations**: P&L, portfolio values, risk metrics
+2. **Authentication Security**: Password handling, token management
+3. **Data Integrity**: Market data accuracy, position tracking
+4. **Order Execution**: Paper trading order processing
+
+#### Medium-Risk Areas
+1. **Real-time Updates**: WebSocket connections, data synchronization
+2. **AI Predictions**: Model accuracy, response quality
+3. **User Interface**: Data display accuracy, responsive design
+4. **Performance**: Load handling, response times
+
+#### Low-Risk Areas
+1. **Static Content**: Help pages, documentation
+2. **UI Components**: Non-functional components, styling
+3. **Configuration**: Settings, preferences
+4. **Logging**: Audit trails, telemetry
+
+---
+
+## Bug Reporting & Issue Tracking
+
+### Bug Report Template
+
+```markdown
+## Bug Report
+
+**Bug ID**: [Auto-generated]
+**Severity**: [Critical/High/Medium/Low]
+**Priority**: [P1/P2/P3/P4]
+**Environment**: [Test/Staging/Production]
+**Browser**: [Chrome/Firefox/Safari/Edge]
+**OS**: [Windows/macOS/Linux]
+**Device**: [Desktop/Mobile/Tablet]
+
+### Description
+Brief description of the bug
+
+### Steps to Reproduce
+1. Step 1
+2. Step 2
+3. Step 3
+
+### Expected Result
+What should happen
+
+### Actual Result
+What actually happens
+
+### Screenshots/Videos
+[Attach relevant media]
+
+### Console Logs
+[Paste console errors if any]
+
+### Additional Information
+Any other relevant details
+```
+
+### Severity Classification
+
+| Severity | Description | Examples | Response Time |
+|----------|-------------|----------|---------------|
+| Critical | System down, data loss, security breach | Login failure, data corruption | 2 hours |
+| High | Major feature broken, significant impact | Trading errors, portfolio miscalculation | 4 hours |
+| Medium | Minor feature issues, workarounds available | UI glitches, performance issues | 24 hours |
+| Low | Cosmetic issues, minor inconveniences | Text typos, styling issues | 72 hours |
+
+### Issue Tracking Workflow
+
+```mermaid
+graph TD
+    BUG_FOUND[Bug Found] --> REPORT[Create Bug Report]
+    REPORT --> TRIAGE[Bug Triage]
+    TRIAGE --> SEVERITY{Severity Assessment}
+    
+    SEVERITY -->|Critical| IMMEDIATE[Immediate Fix]
+    SEVERITY -->|High| URGENT[Urgent Fix]
+    SEVERITY -->|Medium| SCHEDULED[Scheduled Fix]
+    SEVERITY -->|Low| BACKLOG[Add to Backlog]
+    
+    IMMEDIATE --> FIX[Develop Fix]
+    URGENT --> FIX
+    SCHEDULED --> FIX
+    BACKLOG --> PRIORITY[Priority Assessment]
+    
+    FIX --> TEST[Test Fix]
+    TEST --> VERIFY{Verification}
+    VERIFY -->|Pass| DEPLOY[Deploy Fix]
+    VERIFY -->|Fail| FIX
+    DEPLOY --> CLOSE[Close Bug]
+```
+
+### Testing Tools Integration
+
+#### Automated Bug Detection
+```typescript
+// Example automated bug detection
+describe('Automated Bug Detection', () => {
+  it('should detect authentication failures', async () => {
+    const authFailures = await detectAuthFailures()
+    expect(authFailures).toHaveLength(0)
+  })
+  
+  it('should detect data inconsistencies', async () => {
+    const inconsistencies = await detectDataInconsistencies()
+    expect(inconsistencies).toHaveLength(0)
+  })
+  
+  it('should detect performance regressions', async () => {
+    const performance = await measurePerformance()
+    expect(performance.responseTime).toBeLessThan(200)
+  })
+})
+```
+
+---
+
+## Performance Testing
+
+### Load Testing Scenarios
+
+#### User Load Testing
+```typescript
+// Load testing configuration
+const loadTestConfig = {
+  scenarios: {
+    normalLoad: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        { duration: '2m', target: 100 },
+        { duration: '5m', target: 100 },
+        { duration: '2m', target: 0 }
+      ]
+    },
+    peakLoad: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        { duration: '1m', target: 500 },
+        { duration: '3m', target: 500 },
+        { duration: '1m', target: 0 }
+      ]
+    }
+  }
+}
+```
+
+#### API Load Testing
+```typescript
+// API endpoint load testing
+const apiLoadTests = [
+  {
+    endpoint: '/api/stocks',
+    method: 'GET',
+    expectedResponseTime: 200,
+    maxConcurrentUsers: 100
+  },
+  {
+    endpoint: '/api/portfolio',
+    method: 'GET',
+    expectedResponseTime: 150,
+    maxConcurrentUsers: 50
+  },
+  {
+    endpoint: '/api/paper-trading/orders',
+    method: 'POST',
+    expectedResponseTime: 300,
+    maxConcurrentUsers: 25
+  }
+]
+```
+
+### Performance Benchmarks
+
+| Metric | Target | Acceptable | Critical |
+|--------|--------|------------|----------|
+| Page Load Time | < 2s | < 3s | > 5s |
+| API Response Time | < 200ms | < 500ms | > 1s |
+| Database Query Time | < 50ms | < 100ms | > 200ms |
+| WebSocket Latency | < 100ms | < 200ms | > 500ms |
+| Memory Usage | < 512MB | < 1GB | > 2GB |
+| CPU Usage | < 50% | < 70% | > 90% |
+
+### Performance Testing Tools
+
+#### Frontend Performance
+```bash
+# Lighthouse performance testing
+npm run test:lighthouse
+
+# WebPageTest integration
+npm run test:webpagetest
+
+# Bundle size analysis
+npm run analyze:bundle
+```
+
+#### Backend Performance
+```bash
+# API load testing with k6
+npm run test:load:api
+
+# Database performance testing
+npm run test:db:performance
+
+# Memory profiling
+npm run test:memory
+```
+
+---
+
+## Security Testing
+
+### Security Test Scenarios
+
+#### Authentication Security
+```typescript
+// Security test cases
+const securityTests = [
+  {
+    test: 'SQL Injection Prevention',
+    scenario: 'Attempt SQL injection in login form',
+    expected: 'Request blocked, no data compromise'
+  },
+  {
+    test: 'XSS Prevention',
+    scenario: 'Inject malicious scripts in user input',
+    expected: 'Scripts sanitized, no execution'
+  },
+  {
+    test: 'CSRF Protection',
+    scenario: 'Attempt cross-site request forgery',
+    expected: 'Request blocked, CSRF token validation'
+  },
+  {
+    test: 'Rate Limiting',
+    scenario: 'Exceed API rate limits',
+    expected: 'Requests throttled, appropriate error'
+  }
+]
+```
+
+#### Data Security
+```typescript
+// Data security validation
+const dataSecurityTests = [
+  {
+    test: 'Data Encryption',
+    scenario: 'Verify sensitive data encryption',
+    expected: 'All sensitive data encrypted at rest'
+  },
+  {
+    test: 'Data Transmission',
+    scenario: 'Verify HTTPS enforcement',
+    expected: 'All data transmitted over HTTPS'
+  },
+  {
+    test: 'Data Access Control',
+    scenario: 'Attempt unauthorized data access',
+    expected: 'Access denied, proper authorization required'
+  }
+]
+```
+
+### Security Testing Tools
+
+#### Automated Security Scanning
+```bash
+# OWASP ZAP security scanning
+npm run test:security:zap
+
+# Dependency vulnerability scanning
+npm run test:security:deps
+
+# Code security analysis
+npm run test:security:code
+```
+
+#### Manual Security Testing
+```bash
+# Authentication security testing
+npm run test:security:auth
+
+# API security testing
+npm run test:security:api
+
+# Data security testing
+npm run test:security:data
+```
+
+---
+
+## Test Data Management
+
+### Test Data Categories
+
+#### User Data
+```typescript
+// Test user accounts
+const testUsers = {
+  admin: {
+    email: 'admin@test.vidality.com',
+    password: 'AdminTest123!',
+    role: 'admin'
+  },
+  trader: {
+    email: 'trader@test.vidality.com',
+    password: 'TraderTest123!',
+    role: 'trader'
+  },
+  viewer: {
+    email: 'viewer@test.vidality.com',
+    password: 'ViewerTest123!',
+    role: 'viewer'
+  }
+}
+```
+
+#### Market Data
+```typescript
+// Test market data
+const testMarketData = {
+  stocks: [
+    { symbol: 'AAPL', price: 150.25, change: 2.5, volume: 1000000 },
+    { symbol: 'MSFT', price: 300.50, change: -1.2, volume: 800000 },
+    { symbol: 'GOOGL', price: 2800.75, change: 15.3, volume: 500000 }
+  ],
+  marketStatus: {
+    isOpen: true,
+    status: 'regular',
+    nextOpen: '2025-01-15T09:30:00Z'
+  }
+}
+```
+
+#### Portfolio Data
+```typescript
+// Test portfolio data
+const testPortfolios = {
+  empty: {
+    name: 'Empty Portfolio',
+    positions: [],
+    totalValue: 0
+  },
+  diversified: {
+    name: 'Diversified Portfolio',
+    positions: [
+      { symbol: 'AAPL', quantity: 100, avgPrice: 145.00 },
+      { symbol: 'MSFT', quantity: 50, avgPrice: 295.00 }
+    ],
+    totalValue: 30000
+  }
+}
+```
+
+### Test Data Cleanup
+
+#### Automated Cleanup
+```typescript
+// Test data cleanup utilities
+const cleanupUtils = {
+  clearUserData: async () => {
+    await prisma.user.deleteMany({
+      where: { email: { contains: '@test.vidality.com' } }
+    })
+  },
+  
+  clearPortfolioData: async () => {
+    await prisma.portfolio.deleteMany({
+      where: { name: { contains: 'Test' } }
+    })
+  },
+  
+  clearTestData: async () => {
+    await cleanupUtils.clearUserData()
+    await cleanupUtils.clearPortfolioData()
+    await cleanupUtils.clearTradingData()
+  }
+}
+```
+
+#### Manual Cleanup
+```bash
+# Reset test database
+npm run test:db:reset
+
+# Clear test files
+npm run test:cleanup:files
+
+# Clear test cache
+npm run test:cleanup:cache
+```
+
+---
+
+## Continuous Integration
+
+### CI/CD Pipeline
+
+#### Test Pipeline Stages
+```yaml
+# GitHub Actions workflow
+name: Testing Pipeline
+on: [push, pull_request]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests
+        run: npm run test:unit
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+      - name: Run integration tests
+        run: npm run test:integration
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build application
+        run: npm run build
+      - name: Start application
+        run: npm start &
+      - name: Run E2E tests
+        run: npm run test:e2e
+```
+
+#### Quality Gates
+```typescript
+// Quality gate configuration
+const qualityGates = {
+  unitTestCoverage: {
+    minimum: 80,
+    target: 90
+  },
+  integrationTestCoverage: {
+    minimum: 70,
+    target: 80
+  },
+  e2eTestCoverage: {
+    minimum: 60,
+    target: 70
+  },
+  performanceThresholds: {
+    pageLoadTime: 2000,
+    apiResponseTime: 200,
+    memoryUsage: 512
+  }
+}
+```
+
+### Test Reporting
+
+#### Test Results Dashboard
+```typescript
+// Test reporting configuration
+const testReporting = {
+  formats: ['html', 'json', 'junit'],
+  destinations: [
+    'test-results/',
+    'coverage/',
+    'artifacts/'
+  ],
+  notifications: {
+    slack: process.env.SLACK_WEBHOOK_URL,
+    email: process.env.EMAIL_NOTIFICATIONS,
+    teams: process.env.TEAMS_WEBHOOK_URL
+  }
+}
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### Environment Setup Issues
+
+**Issue**: Database connection failed
+```bash
+# Solution
+1. Check PostgreSQL service status
+2. Verify connection string in .env.test
+3. Ensure database exists
+4. Check user permissions
+
+# Commands
+sudo systemctl status postgresql
+psql -U test_user -d vidality_test -c "SELECT 1;"
+```
+
+**Issue**: Node modules installation failed
+```bash
+# Solution
+1. Clear npm cache
+2. Delete node_modules and package-lock.json
+3. Reinstall dependencies
+
+# Commands
+npm cache clean --force
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**Issue**: Python dependencies installation failed
+```bash
+# Solution
+1. Check Python version
+2. Update pip
+3. Install dependencies manually
+
+# Commands
+python --version
+pip install --upgrade pip
 bash scripts/install-python-deps.sh
 ```
 
-### Code Quality Standards
-- **TypeScript**: Strict mode enabled
-- **ESLint**: Airbnb configuration
-- **Prettier**: Code formatting
-- **Husky**: Git hooks for quality checks
-- **Testing**: Jest and React Testing Library
+#### Test Execution Issues
 
----
-
-## Testing Strategy
-
-### Testing Pyramid
-
-```mermaid
-graph TB
-    subgraph "E2E Tests"
-        CYPRESS[Cypress Tests]
-        PLAYWRIGHT[Playwright Tests]
-    end
-    
-    subgraph "Integration Tests"
-        API_TESTS[API Tests]
-        DB_TESTS[Database Tests]
-    end
-    
-    subgraph "Unit Tests"
-        COMPONENT_TESTS[Component Tests]
-        UTILITY_TESTS[Utility Tests]
-        HOOK_TESTS[Hook Tests]
-    end
-    
-    CYPRESS --> API_TESTS
-    PLAYWRIGHT --> DB_TESTS
-    API_TESTS --> COMPONENT_TESTS
-    DB_TESTS --> UTILITY_TESTS
-    COMPONENT_TESTS --> HOOK_TESTS
-```
-
-### Test Coverage
-- **Unit Tests**: 80%+ coverage
-- **Integration Tests**: Critical paths
-- **E2E Tests**: User journeys
-- **API Tests**: All endpoints
-- **Performance Tests**: Load testing
-
-### Testing Tools
-- **Jest**: Unit testing framework
-- **React Testing Library**: Component testing
-- **Cypress**: E2E testing
-- **Supertest**: API testing
-- **MSW**: API mocking
-
----
-
-## Performance Optimization
-
-### Frontend Optimization
-- **Code Splitting**: Route-based splitting
-- **Lazy Loading**: Component lazy loading
-- **Image Optimization**: Next.js Image component
-- **Bundle Analysis**: Webpack bundle analyzer
-- **Caching**: React Query caching
-- **Memoization**: React.memo and useMemo
-
-### Backend Optimization
-- **Database Indexing**: Optimized queries
-- **Connection Pooling**: Database connections
-- **Caching**: Redis caching layer
-- **API Rate Limiting**: Request throttling
-- **Compression**: Gzip compression
-- **CDN**: Static asset delivery
-
-### Performance Metrics
-- **Core Web Vitals**: LCP, FID, CLS
-- **Lighthouse Score**: 90+ target
-- **API Response Time**: <200ms average
-- **Database Query Time**: <50ms average
-- **Bundle Size**: <500KB initial load
-
----
-
-## Monitoring & Analytics
-
-### Monitoring Architecture
-
-```mermaid
-graph TB
-    subgraph "Application Monitoring"
-        TELEMETRY[Telemetry System]
-        LOGS[Application Logs]
-        METRICS[Performance Metrics]
-    end
-    
-    subgraph "User Analytics"
-        EVENTS[User Events]
-        SESSIONS[Session Tracking]
-        CONVERSION[Conversion Tracking]
-    end
-    
-    subgraph "Business Metrics"
-        TRADING[Trading Metrics]
-        USAGE[Feature Usage]
-        RETENTION[User Retention]
-    end
-    
-    subgraph "Alerting"
-        ALERTS[Alert System]
-        NOTIFICATIONS[Notifications]
-        DASHBOARD[Monitoring Dashboard]
-    end
-    
-    TELEMETRY --> EVENTS
-    LOGS --> SESSIONS
-    METRICS --> CONVERSION
-    
-    EVENTS --> TRADING
-    SESSIONS --> USAGE
-    CONVERSION --> RETENTION
-    
-    TRADING --> ALERTS
-    USAGE --> NOTIFICATIONS
-    RETENTION --> DASHBOARD
-```
-
-### Telemetry System
+**Issue**: Tests timing out
 ```typescript
-interface TelemetryEvent {
-  id: string;
-  sessionId: string;
-  userId?: string;
-  event: string;
-  category: string;
-  timestamp: Date;
-  properties: Record<string, any>;
-  metadata: Record<string, any>;
-  severity?: string;
-  value?: number;
-  unit?: string;
+// Solution: Increase timeout in test configuration
+const testConfig = {
+  timeout: 30000, // 30 seconds
+  retries: 3,
+  retryDelay: 1000
 }
 ```
 
-### Key Metrics
-- **User Engagement**: Daily/Monthly active users
-- **Trading Activity**: Orders, volume, frequency
-- **Feature Usage**: Most used features
-- **Performance**: Response times, error rates
-- **Business**: Revenue, conversion rates
-
----
-
-## Quality Assurance & Testing
-
-### TestSprite Analysis Results
-
-Based on comprehensive TestSprite analysis of the Vidality codebase, the platform demonstrates exceptional technical quality and comprehensive feature coverage:
-
-#### **Code Quality Metrics**
-- **Total Components**: 166+ React components with TypeScript
-- **API Endpoints**: 50+ RESTful endpoints with comprehensive error handling
-- **Database Tables**: 20+ normalized tables with proper relationships
-- **Test Coverage**: Comprehensive unit, integration, and E2E testing framework
-- **Code Standards**: ESLint, Prettier, and TypeScript strict mode compliance
-
-#### **Feature Completeness Analysis**
-- **Authentication System**: ✅ Complete with OAuth, JWT, MFA, and security monitoring
-- **Real-time Data**: ✅ Multi-source with WebSocket, validation, and fallback mechanisms
-- **Portfolio Management**: ✅ Full CRUD operations with analytics and performance tracking
-- **Paper Trading**: ✅ Realistic simulation with order execution and position management
-- **AI Integration**: ✅ OpenAI, ML models, and document analysis capabilities
-- **Charting System**: ✅ Professional-grade with 50+ indicators and export features
-- **Security**: ✅ Bank-grade with rate limiting, encryption, and threat detection
-
-#### **Technical Debt Assessment**
-- **Low Technical Debt**: Clean architecture with proper separation of concerns
-- **Maintainable Code**: Well-documented with consistent patterns and naming conventions
-- **Scalable Design**: Microservices architecture ready for horizontal scaling
-- **Performance Optimized**: Efficient data structures and caching strategies
-
-### Testing Strategy Implementation
-
-#### **Frontend Testing**
+**Issue**: Flaky tests
 ```typescript
-// Component Testing with React Testing Library
-describe('Dashboard Component', () => {
-  it('renders portfolio overview correctly', () => {
-    render(<Dashboard />)
-    expect(screen.getByText('Portfolio Overview')).toBeInTheDocument()
-  })
-  
-  it('handles real-time data updates', async () => {
-    const mockData = { price: 150.25, change: 2.5 }
-    render(<Dashboard />)
-    await waitFor(() => {
-      expect(screen.getByText('$150.25')).toBeInTheDocument()
-    })
-  })
-})
-```
+// Solution: Add proper wait conditions
+const waitForElement = async (selector, timeout = 5000) => {
+  await page.waitForSelector(selector, { timeout })
+}
 
-#### **API Testing**
-```typescript
-// API Endpoint Testing
-describe('/api/stocks', () => {
-  it('returns paginated stock data', async () => {
-    const response = await request(app)
-      .get('/api/stocks?page=1&limit=10')
-      .expect(200)
-    
-    expect(response.body.stocks).toHaveLength(10)
-    expect(response.body.hasMore).toBeDefined()
-  })
-  
-  it('validates authentication for protected endpoints', async () => {
-    await request(app)
-      .get('/api/portfolio')
-      .expect(401)
-  })
-})
-```
-
-#### **Integration Testing**
-- **Database Integration**: Prisma ORM with PostgreSQL testing
-- **External APIs**: Mocked Polygon.io and Yahoo Finance responses
-- **WebSocket Testing**: Real-time data connection validation
-- **Authentication Flow**: Complete OAuth and JWT token testing
-
----
-
-## Security Audit & Compliance
-
-### Security Architecture Review
-
-#### **Authentication & Authorization**
-- **Multi-Factor Authentication**: TOTP support with backup codes
-- **JWT Token Management**: Secure token generation, validation, and refresh
-- **OAuth Integration**: Google OAuth with proper scope management
-- **Session Management**: Secure session handling with automatic expiry
-- **Password Security**: Bcrypt hashing with salt rounds and complexity requirements
-
-#### **Data Protection**
-- **Encryption at Rest**: Database encryption with AES-256
-- **Encryption in Transit**: TLS 1.3 for all communications
-- **API Security**: Rate limiting, input validation, and SQL injection protection
-- **Data Anonymization**: PII protection and GDPR compliance measures
-
-#### **Security Monitoring**
-```typescript
-// Security Event Logging
-interface SecurityEvent {
-  eventType: 'LOGIN_ATTEMPT' | 'FAILED_AUTH' | 'SUSPICIOUS_ACTIVITY'
-  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
-  userId?: string
-  ipAddress: string
-  userAgent: string
-  details: Record<string, any>
-  riskScore: number
-  blocked: boolean
-  timestamp: Date
+const waitForApiResponse = async (url, timeout = 10000) => {
+  await page.waitForResponse(response => 
+    response.url().includes(url), { timeout }
+  )
 }
 ```
 
-#### **Compliance Standards**
-- **Financial Industry**: SOX compliance for financial data handling
-- **Data Privacy**: GDPR and CCPA compliance for user data protection
-- **Security Standards**: OWASP Top 10 compliance and security best practices
-- **Audit Trail**: Comprehensive logging for regulatory compliance
+**Issue**: Test data conflicts
+```typescript
+// Solution: Use unique test data
+const generateUniqueTestData = () => {
+  const timestamp = Date.now()
+  return {
+    email: `test-${timestamp}@vidality.com`,
+    portfolioName: `Test Portfolio ${timestamp}`,
+    symbol: `TEST${timestamp}`
+  }
+}
+```
 
-### Security Testing Results
+### Debugging Tools
 
-#### **Penetration Testing**
-- **SQL Injection**: ✅ Protected with parameterized queries
-- **XSS Prevention**: ✅ Input sanitization and CSP headers
-- **CSRF Protection**: ✅ CSRF tokens and SameSite cookies
-- **Authentication Bypass**: ✅ Multi-layer authentication validation
-- **Rate Limiting**: ✅ API endpoint protection against abuse
+#### Frontend Debugging
+```bash
+# Enable debug mode
+DEBUG=* npm run test
 
-#### **Vulnerability Assessment**
-- **Dependencies**: Regular security updates and vulnerability scanning
-- **Code Analysis**: Static analysis with security-focused linting rules
-- **Infrastructure**: Cloud security best practices and network isolation
-- **Monitoring**: Real-time threat detection and incident response
+# Run tests with verbose output
+npm run test -- --verbose
 
----
+# Run specific test with debugging
+npm run test -- --testNamePattern="Authentication" --verbose
+```
 
-## Future Roadmap
+#### Backend Debugging
+```bash
+# Enable API debugging
+DEBUG=api:* npm run test:integration
 
-### Phase 1: Enhanced Features (Q1 2025)
-- **Advanced Charting**: Additional 20+ technical indicators and advanced drawing tools
-- **Options Trading**: Complete options chain analysis and strategy builder
-- **Social Trading**: Copy trading features with performance tracking
-- **Mobile App**: React Native application with full feature parity
-- **Real-time Alerts**: Push notifications and SMS integration
+# Run with detailed logging
+LOG_LEVEL=debug npm run test:api
 
-### Phase 2: AI Enhancement (Q2 2025)
-- **Advanced ML Models**: Deep learning integration with transformer architectures
-- **Sentiment Analysis**: Social media and news sentiment integration
-- **Portfolio Optimization**: AI-powered asset allocation and rebalancing
-- **Risk Management**: Advanced risk models with Monte Carlo simulation
-- **Automated Trading**: Algorithm execution with backtesting validation
+# Database query debugging
+DEBUG=prisma:* npm run test:db
+```
 
-### Phase 3: Platform Expansion (Q3 2025)
-- **Crypto Support**: Cryptocurrency trading with DeFi integration
-- **International Markets**: Global market access with multi-currency support
-- **Institutional Features**: Professional tools for hedge funds and institutions
-- **API Platform**: Third-party integrations and marketplace
-- **White-label Solution**: Customizable platform for financial institutions
+#### E2E Debugging
+```bash
+# Run E2E tests in headed mode
+npm run test:e2e:headed
 
-### Phase 4: Enterprise Features (Q4 2025)
-- **Multi-tenant Architecture**: Enterprise support with custom branding
-- **Advanced Analytics**: Business intelligence and reporting suite
-- **Compliance Tools**: Regulatory compliance and audit trails
-- **Custom Strategies**: Strategy marketplace with community features
-- **Professional Services**: Consulting, training, and support services
+# Run with video recording
+npm run test:e2e:video
 
-### Phase 5: Next-Generation Features (2026)
-- **Quantum Computing**: Quantum algorithm integration for portfolio optimization
-- **Blockchain Integration**: DeFi protocols and smart contract trading
-- **AR/VR Trading**: Immersive trading experience with virtual reality
-- **Global Expansion**: Multi-region deployment with local compliance
-- **AI Trading Bots**: Fully autonomous trading with human oversight
+# Run with screenshot on failure
+npm run test:e2e:screenshot
+```
+
+### Performance Debugging
+
+#### Memory Leak Detection
+```typescript
+// Memory leak detection
+const detectMemoryLeaks = async () => {
+  const initialMemory = process.memoryUsage()
+  
+  // Run test operations
+  await runTestOperations()
+  
+  const finalMemory = process.memoryUsage()
+  const memoryIncrease = finalMemory.heapUsed - initialMemory.heapUsed
+  
+  if (memoryIncrease > 100 * 1024 * 1024) { // 100MB
+    throw new Error('Potential memory leak detected')
+  }
+}
+```
+
+#### Performance Profiling
+```bash
+# CPU profiling
+npm run test:profile:cpu
+
+# Memory profiling
+npm run test:profile:memory
+
+# Network profiling
+npm run test:profile:network
+```
 
 ---
 
 ## Conclusion
 
-Vidality represents the pinnacle of modern trading platform architecture, combining cutting-edge web technologies with sophisticated AI and machine learning capabilities. The platform's enterprise-grade architecture is meticulously designed for scalability, security, and performance, delivering institutional-quality tools for professional traders and serious investors.
+This testing documentation provides comprehensive guidance for testing the Vidality Trading Platform. It covers all aspects of testing from environment setup to advanced debugging techniques.
 
-### **Technical Excellence Achieved**
-- **Architecture**: Microservices-based design with clean separation of concerns
-- **Performance**: Sub-200ms response times with 99.9% uptime reliability
-- **Security**: Bank-grade security with comprehensive threat monitoring
-- **Scalability**: Cloud-native architecture ready for global expansion
-- **Innovation**: AI-powered insights and machine learning integration
+### Key Takeaways
+- **Comprehensive Coverage**: All major features and edge cases are covered
+- **Automated First**: Emphasis on automated testing with manual testing for complex scenarios
+- **Risk-Based**: Focus on high-risk areas like financial calculations and security
+- **Continuous Integration**: Full CI/CD pipeline integration with quality gates
+- **Professional Standards**: Industry-standard practices and documentation
 
-### **Business Impact**
-- **User Experience**: Intuitive interface with professional-grade functionality
-- **Market Position**: Competitive advantage through advanced AI capabilities
-- **Revenue Potential**: Multiple monetization streams and enterprise opportunities
-- **Growth Strategy**: Scalable platform ready for international expansion
-- **Compliance**: Built with financial industry standards and regulatory requirements
-
-### **Development Excellence**
-- **Code Quality**: 166+ components with comprehensive testing coverage
-- **Documentation**: Complete technical documentation for all stakeholders
-- **Maintainability**: Clean architecture with consistent patterns and standards
-- **Team Readiness**: Professional documentation suitable for development teams
-- **Future-Proof**: Modern technology stack with upgrade paths
-
-The comprehensive documentation provided here serves as the definitive technical reference for developers, system administrators, product managers, and stakeholders involved in the platform's development, maintenance, and strategic planning.
+### Next Steps
+1. **Review and Customize**: Adapt this documentation to your specific testing needs
+2. **Team Training**: Ensure all team members are familiar with testing procedures
+3. **Tool Setup**: Configure testing tools and CI/CD pipeline
+4. **Regular Updates**: Keep documentation updated with new features and changes
 
 ---
 
 ## Document Information
 
-**Document Classification**: Internal Technical Documentation  
-**Security Level**: Confidential  
-**Distribution**: Vidality Development Team  
-**Review Cycle**: Quarterly  
-**Next Review Date**: April 2025
+**Document Classification**: Internal Testing Documentation  
+**Security Level**: Internal Use Only  
+**Distribution**: QA Team, Development Team  
+**Review Cycle**: Monthly  
+**Next Review Date**: February 2025
 
 **Contact Information**:
-- **Technical Lead**: Vidality Development Team
-- **Documentation**: Technical Writing Team
-- **Security**: Information Security Team
-- **Compliance**: Legal and Compliance Team
+- **QA Lead**: QA Team Lead
+- **Testing Tools**: DevOps Team
+- **Environment Issues**: Infrastructure Team
+- **Test Data**: Database Team
 
 ---
 
-*Document Version: 2.0*  
+*Document Version: 1.0*  
 *Last Updated: January 2025*  
-*Maintained by: Vidality Development Team*  
+*Maintained by: Vidality QA Team*  
 *© 2025 Vidality Pty Ltd. All rights reserved.*
